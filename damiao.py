@@ -763,8 +763,10 @@ if __name__ == "__main__":
                     #kp = 0.0； kd = 1.0； q = 0.0，因为 kp=0，位置目标基本不起作用 ；dq = 1.0，目标速度； tau = 0.0
                     # control.control_mit(control.getMotor(canid1), 0.0, 1.0, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid2), 0.0, 1.0, 0.0, 0.7, 0)
-                    control.control_mit(control.getMotor(canid3), 0.0, 1.5, 0.0, 0.5, 0)
-                    control.control_mit(control.getMotor(canid4), 0.0, 1.5, 0.0, 0.7, 0)
+                    # control.control_mit(control.getMotor(canid3), 0.0, 1.5, 0.0, 0.5, 0)
+                    # control.control_mit(control.getMotor(canid4), 0.0, 1.5, 0.0, 0.7, 0)
+                    control.refresh_motor_status(control.getMotor(canid3))
+                    control.refresh_motor_status(control.getMotor(canid4))
                     # control.control_mit(control.getMotor(canid5), 0.0, 1.0, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid6), 0.0, 1.0, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid7), 0.0, 1.5, 0.0, 0.7, 0)
