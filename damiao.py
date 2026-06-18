@@ -3,6 +3,8 @@
 import os
 import sys
 import ctypes
+import json
+import socket
 
 # 针对 Ubuntu22.04 环境的 libusb 兼容性补丁
 if sys.platform == "linux" and "CONDA_PREFIX" in os.environ:
@@ -666,7 +668,7 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
     try:
         init_data1= []
         init_data2 = []
@@ -688,6 +690,7 @@ if __name__ == "__main__":
         mstid8=0x18
         canid9=0x09
         mstid9=0x19
+        #定义电机信息列表：
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 你的电机型号
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
@@ -737,7 +740,7 @@ if __name__ == "__main__":
         # with Motor_Control(1000000, 5000000, "EC5BDB0C47494471B94B9E637DF39DA1", init_data1,device_type=dmcan_device_type.USB2CANFD_DUAL) as control:
         #USB-CANFD 设备 SN
         device_sn = "D6977F56F86C64B77B316E7154FA6DF3"
-        #CANFD 波特率 1000000 是仲裁段 1M，5000000 是数据段 5M。你、按文档 5M 就保持这样。
+        #CANFD 波特率 1000000 是仲裁段 1M，5000000 是数据段 5M。你、按文档 5M 就保持这样。初始化电机控制结构体
         with Motor_Control(1000000, 5000000, device_sn, init_data1,device_type=None) as control:
             # control.set_zero_position(control.getMotor(canid1)) # 设置电机零位
             # control.set_zero_position(control.getMotor(canid2))
@@ -748,7 +751,18 @@ if __name__ == "__main__":
             # control.set_zero_position(control.getMotor(canid7))
             # control.set_zero_position(control.getMotor(canid8))
             # control.set_zero_position(control.getMotor(canid9))
-            loop_count = 0
+            loop_count = 0  #循环计数器
+            fr_thigh_offset = 0.0   # FR_thigh 偏移量
+            fr_calf_offset = 0.0   # FR_calf 偏移量
+            fr_key_step = 3.141592653589793 / 180.0  # 1deg joint per key press
+            fr_limit = 20.0 * 3.141592653589793 / 180.0 # 20deg joint limit
+            udp_timeout_s = 0.5 # UDP 超时 0.5 秒
+            udp_tau_limit = 2.0 # UDP tau limit 2.0 Nm
+            udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            udp_sock.bind(("127.0.0.1", 15001))
+            udp_sock.setblocking(False)
+            last_udp_time = time.monotonic()
+            print("[UDP] listening on 127.0.0.1:15001; IsaacSim FR -> real RR canid7/canid8")
             while running.is_set():
                     #控制周期 现在是 10ms，即 100Hz(1/0.01s=100hz)。后面多电机测试稳定后再考虑更快。
                     desired_duration = 0.01  # 秒
@@ -765,14 +779,103 @@ if __name__ == "__main__":
                     # control.control_mit(control.getMotor(canid2), 0.0, 1.0, 0.0, 0.7, 0)
                     # control.control_mit(control.getMotor(canid3), 0.0, 1.5, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid4), 0.0, 1.5, 0.0, 0.7, 0)
-                    control.refresh_motor_status(control.getMotor(canid3))
-                    control.refresh_motor_status(control.getMotor(canid4))
+                    # old: 只读 canid3/canid4 位置，用来记录默认姿态
+                    # control.refresh_motor_status(control.getMotor(canid3))
+                    # control.refresh_motor_status(control.getMotor(canid4))
+
+                    # old: FR_thigh(canid3) 默认姿态附近 3 度安全慢速摆动测试
+                    # old: 约定：FR_thigh -> canid3, FR_calf -> canid4, sign=-1, ratio=6:1
+                    # old: m3_default = 1.637
+                    # old: m4_default = 1.823
+                    # old: m3_target = 1.323  # 1.637 - 6 * radians(3deg)
+                    # old: m4_target = 1.823
+
+                    # old: 按当前实测位置测试 canid3；canid4 只刷新状态，不做位置保持
+                    # old: FR_thigh(canid3): 3deg joint = 6 * 0.05236 = 0.314rad motor
+                    # old: m3_default = 1.455
+                    # old: m3_target = 1.141  # 1.455 - 6 * radians(3deg)
+
+                    # old: 测试 FR_calf(canid4)，canid3 只刷新状态
+                    # old: FR_calf(canid4): 3deg joint = 6 * 0.05236 = 0.314rad motor
+                    # old: m4_default = 1.628
+                    # old: m4_target = 1.314  # 1.628 - 6 * radians(3deg)
+
+                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 3 度慢速往返
+                    # old: 3deg joint = 6 * 0.05236 = 0.314rad motor
+                    # old: m3_target = 1.141  # 1.455 - 6 * radians(3deg)
+                    # old: m4_target = 1.314  # 1.628 - 6 * radians(3deg)
+
+                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 8 度慢速往返
+                    # old: 8deg joint = 6 * 0.13963 = 0.838rad motor
+                    # old: m3_target = 0.617  # 1.455 - 6 * radians(8deg)
+                    # old: m4_target = 0.790  # 1.628 - 6 * radians(8deg)
+
+                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 14 度慢速往返
+                    # old: 14deg joint = 6 * 0.24435 = 1.466rad motor
+                    # old: m3_target = -0.011  # 1.455 - 6 * radians(14deg)
+                    # old: m4_target = 0.162  # 1.628 - 6 * radians(14deg)
+
+                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 20 度慢速往返
+                    # old: 20deg joint = 6 * 0.34907 = 2.094rad motor
+                    # old: m3_target = -0.639  # 1.455 - 6 * radians(20deg)
+                    # old: m4_target = -0.466  # 1.628 - 6 * radians(20deg)
+
+                    # old: 只读 canid7/canid8，用来记录 RR-as-FR 默认姿态电机位置
+                    # old: m7_default = 0.089
+                    # old: m8_default = 1.433
+
+                    # old: 键盘手动控制真实 RR 单腿临时冒充仿真 FR 腿
+                    # old: PowerShell 方向键直接改 fr_thigh_offset/fr_calf_offset
+
+                    # 新：接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
+                    # q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
+                    m7_default = 0.089  # canid7 的默认位置，实测值，保持不变
+                    m8_default = 1.433
+
+                    motor7 = control.getMotor(canid7)
+                    motor8 = control.getMotor(canid8)
+
+                    while True:
+                        try:
+                            packet, _addr = udp_sock.recvfrom(4096)
+                        except BlockingIOError:
+                            break
+                        try:
+                            msg = json.loads(packet.decode("ascii"))
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            continue
+                        if msg.get("leg") != "FR":
+                            continue
+                        fr_thigh_offset = float(msg.get("thigh_offset_rad", fr_thigh_offset))
+                        fr_calf_offset = float(msg.get("calf_offset_rad", fr_calf_offset))
+                        last_udp_time = time.monotonic()
+
+                    fr_thigh_offset = max(-fr_limit, min(fr_limit, fr_thigh_offset))
+                    fr_calf_offset = max(-fr_limit, min(fr_limit, fr_calf_offset))
+                    udp_age = time.monotonic() - last_udp_time
+
+                    # old: q7_cmd = m7_default - 6.0 * fr_thigh_offset
+                    q7_cmd = m7_default + 6.0 * fr_thigh_offset
+                    q8_cmd = m8_default - 6.0 * fr_calf_offset
+
+                    tau7 = motor7.Get_tau()
+                    tau8 = motor8.Get_tau()
+                    if motor7.Get_err() not in (0, 1) or motor8.Get_err() not in (0, 1):
+                        control.disable_all()
+                        raise RuntimeError(f"motor error: m7={motor7.Get_err()} m8={motor8.Get_err()}")
+                    if loop_count > 100 and (abs(tau7) > udp_tau_limit or abs(tau8) > udp_tau_limit):
+                        control.disable_all()
+                        raise RuntimeError(f"tau too high: m7={tau7:.3f} m8={tau8:.3f}")
+
+                    # UDP 超时就保持最后目标，不继续变化；收到新包后会自动更新
+                    control.control_mit(motor7, 35.0, 1.5, q7_cmd, 0.0, 0.0)
+                    control.control_mit(motor8, 35.0, 1.5, q8_cmd, 0.0, 0.0)
                     # control.control_mit(control.getMotor(canid5), 0.0, 1.0, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid6), 0.0, 1.0, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid7), 0.0, 1.5, 0.0, 0.7, 0)
                     # control.control_mit(control.getMotor(canid8), 0.0, 1.0, 0.0, 0.5, 0)
 
-                    #状态打印  每 50 次打印一次。100Hz 下就是 0.5 秒一次。
+                    #状态打印  每 50 次打印一次。100Hz 下就是 0.5 秒一次。  一次是10ms
                     if loop_count % 50 == 0:
                         motor1 = control.getMotor(canid1)
                         motor2 = control.getMotor(canid2)
@@ -785,14 +888,18 @@ if __name__ == "__main__":
 
 
                         print(
-                            f"m1 pos:{motor1.Get_Position():.3f} vel:{motor1.Get_Velocity():.3f} err:{motor1.Get_err()} | "
-                            f"m2 pos:{motor2.Get_Position():.3f} vel:{motor2.Get_Velocity():.3f} err:{motor2.Get_err()} | "
-                            f"m3 pos:{motor3.Get_Position():.3f} vel:{motor3.Get_Velocity():.3f} err:{motor3.Get_err()} | "
-                            f"m4 pos:{motor4.Get_Position():.3f} vel:{motor4.Get_Velocity():.3f} err:{motor4.Get_err()} | "
-                            f"m5 pos:{motor5.Get_Position():.3f} vel:{motor5.Get_Velocity():.3f} err:{motor5.Get_err()} | "
-                            f"m6 pos:{motor6.Get_Position():.3f} vel:{motor6.Get_Velocity():.3f} err:{motor6.Get_err()} | "
-                            f"m7 pos:{motor7.Get_Position():.3f} vel:{motor7.Get_Velocity():.3f} err:{motor7.Get_err()} | "
-                            f"m8 pos:{motor8.Get_Position():.3f} vel:{motor8.Get_Velocity():.3f} err:{motor8.Get_err()} | "
+                            # f"m1 pos:{motor1.Get_Position():.3f} vel:{motor1.Get_Velocity():.3f} err:{motor1.Get_err()} | "
+                            # f"m2 pos:{motor2.Get_Position():.3f} vel:{motor2.Get_Velocity():.3f} err:{motor2.Get_err()} | "
+                            f"thigh_deg:{fr_thigh_offset * 180.0 / 3.141592653589793:+.1f} "
+                            f"calf_deg:{fr_calf_offset * 180.0 / 3.141592653589793:+.1f} "
+                            f"udp_age:{udp_age:.2f}s "
+                            f"cmd7:{q7_cmd:.3f} cmd8:{q8_cmd:.3f} "
+                            f"m7 pos:{motor7.Get_Position():.3f} vel:{motor7.Get_Velocity():.3f} tau:{motor7.Get_tau():.3f} err:{motor7.Get_err()} | "
+                            f"m8 pos:{motor8.Get_Position():.3f} vel:{motor8.Get_Velocity():.3f} tau:{motor8.Get_tau():.3f} err:{motor8.Get_err()} | "
+                            # f"m5 pos:{motor5.Get_Position():.3f} vel:{motor5.Get_Velocity():.3f} err:{motor5.Get_err()} | "
+                            # f"m6 pos:{motor6.Get_Position():.3f} vel:{motor6.Get_Velocity():.3f} err:{motor6.Get_err()} | "
+                            # f"m7 pos:{motor7.Get_Position():.3f} vel:{motor7.Get_Velocity():.3f} err:{motor7.Get_err()} | "
+                            # f"m8 pos:{motor8.Get_Position():.3f} vel:{motor8.Get_Velocity():.3f} err:{motor8.Get_err()} | "
                             # print(
                             # f"canid:{canid1} "
                             # f"pos:{motor1.Get_Position():.3f} "
