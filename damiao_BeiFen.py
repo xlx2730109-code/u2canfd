@@ -1,4 +1,21 @@
-﻿from __future__ import annotations
+﻿# 单腿 sim2real 映射验证
+# 单腿仿真到真机联动
+# 单腿硬件在环测试
+# 流程
+# 1. 先运行 damiao.py，让它监听 UDP
+# 2. 再运行 IsaacSim 的 bennett_single_leg_ik_trace.py
+# 3. 在 IsaacSim 里按键
+# 4. 真实 RR 腿跟随仿真 FR 腿
+
+# IsaacSim 单腿键盘控制
+#         ↓
+# 发送仿真 FR_thigh / FR_calf 目标角
+#         ↓
+# 真实 RR 腿 canid7 / canid8 跟随
+
+
+
+from __future__ import annotations
 
 import os
 import sys
@@ -757,9 +774,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             last_udp_time = time.monotonic()
             print("[UDP] listening on 127.0.0.1:15001; IsaacSim FR -> real RR canid7/canid8")
             while running.is_set():
-                    #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
-                    #damiao.py 300Hz > IsaacSim UDP 250Hz   这样 damiao.py 能更及时地拿到最新目标。
-                    desired_duration = 1/300  # 秒
+                    #控制周期 现在是 10ms，即 100Hz(1/0.01s=100hz)。后面多电机测试稳定后再考虑更快。
+                    desired_duration = 0.01  # 秒
                     current_time = time.perf_counter()
                     loop_count += 1
 
@@ -840,9 +856,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     # control.control_mit(control.getMotor(canid7), 0.0, 1.5, 0.0, 0.7, 0)
                     # control.control_mit(control.getMotor(canid8), 0.0, 1.0, 0.0, 0.5, 0)
 
-                    # old: 状态打印每 50 次打印一次。100Hz 下就是 0.5 秒一次。
-                    # 新：减少 PowerShell 打印阻塞。200Hz 控制下每 200 次打印一次，约 1 秒一次。
-                    if loop_count % 200 == 0:
+                    #状态打印  每 50 次打印一次。100Hz 下就是 0.5 秒一次。  一次是10ms
+                    if loop_count % 50 == 0:
                         motor1 = control.getMotor(canid1)
                         motor2 = control.getMotor(canid2)
                         motor3 = control.getMotor(canid3)
