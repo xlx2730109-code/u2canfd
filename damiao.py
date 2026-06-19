@@ -820,8 +820,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     fr_calf_offset = max(-fr_limit, min(fr_limit, fr_calf_offset))
                     udp_age = time.monotonic() - last_udp_time
 
-                    q7_cmd = m7_default + 6.0 * fr_thigh_offset
-                    q8_cmd = m8_default - 6.0 * fr_calf_offset
+                    q7_cmd = m7_default + 1.0 * fr_thigh_offset
+                    q8_cmd = m8_default - 1.0 * fr_calf_offset
 
                     tau7 = motor7.Get_tau()
                     tau8 = motor8.Get_tau()
