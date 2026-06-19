@@ -748,7 +748,7 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             fr_thigh_offset = 0.0   # FR_thigh 偏移量
             fr_calf_offset = 0.0   # FR_calf 偏移量
             fr_key_step = 3.141592653589793 / 180.0  # 1deg joint per key press
-            fr_limit = 20.0 * 3.141592653589793 / 180.0 # 20deg joint limit
+            fr_limit = 40.0 * 3.141592653589793 / 180.0 # 真机跟随的关节偏移限幅：±40 deg
             udp_timeout_s = 0.5 # UDP 超时 0.5 秒
             udp_tau_limit = 2.0 # UDP tau limit 2.0 Nm
             udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
