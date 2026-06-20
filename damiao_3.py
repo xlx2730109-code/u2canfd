@@ -1,12 +1,25 @@
 ﻿# 单腿RL policy sim2real
-# 当前 runner 是最小版本，主要用于第一次 policy sim2real。它没有从 damiao_2.py 反向读取真实电机反馈，而是用内部目标估计构造 observation。真闭环版本下一步要么把 policy 直接集成进 damiao_2.py，要么让 damiao_2.py 把 m7/m8 反馈再 UDP 发回 runner。当前先小输出验证 policy 动作链路。
+# 把 policy 集成进 damiao_3.py
+# 优点：单进程，理论延迟低。
+# 缺点：达妙 DLL + Torch + conda 环境混在一起，很容易出现 DLL、Python 版本、USB 库冲突。现在不建议。
+# 改两处：
+# damiao_3.py：每隔比如 50Hz 或 100Hz 把 m7/m8 真实反馈 UDP 发到 127.0.0.1:15002。
+# single_leg_policy_udp_runner.py：绑定 15002 接收反馈，用真实反馈构造 observation。
+
+# 重新训练后，搜索policy，接着改动
+
+# 终端直接输入
+# D:\Conda\envs\env_isaaclab\python.exe .\damiao_3.py --policy_rate_hz 50 --output_scale 1
+
 
 from __future__ import annotations
 
 import os
 import sys
 import ctypes
+import argparse
 import json
+import math
 import socket
 
 # 针对 Ubuntu22.04 环境的 libusb 兼容性补丁
@@ -25,6 +38,7 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import IntEnum
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 if sys.platform == "win32":
@@ -42,7 +56,38 @@ if sys.platform == "win32":
     ):
         _dm_dll_handles.append(ctypes.CDLL(os.path.join(dll_dir, dll_name)))
 
+_dmcan_user_site = None
+if sys.platform == "win32":
+    # env_isaaclab 有 torch 但通常没有 dmcan/pyusb；本机 Python313 user-site 已有这两个纯 Python 包。
+    # 只在导入 dmcan 时临时加入，导入后马上移除，避免 Python313 的 numpy 污染 Python311 的 torch。
+    _candidate_user_site = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "Python", "Python313", "site-packages")
+    if os.path.isdir(os.path.join(_candidate_user_site, "dmcan")) and _candidate_user_site not in sys.path:
+        sys.path.insert(0, _candidate_user_site)
+        _dmcan_user_site = _candidate_user_site
+
 from dmcan import DmCanContext, dmcan_channel_can_info, dmcan_device_type, usb_rx_frame
+
+if _dmcan_user_site is not None and _dmcan_user_site in sys.path:
+    sys.path.remove(_dmcan_user_site)
+
+
+DEFAULT_POLICY = (
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-23-57\exported\policy.pt"   #100Hz
+    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
+)
+
+
+def build_reference(elapsed_s: float, amplitude_rad: float, max_speed_rad_s: float) -> tuple[float, float, float, float]:
+    """Return phase sin/cos and thigh/calf reference offsets."""
+    frequency_hz = max_speed_rad_s / max(2.0 * math.pi * amplitude_rad, 1.0e-6)
+    phase = 2.0 * math.pi * frequency_hz * elapsed_s
+    phase_sin = math.sin(phase)
+    phase_cos = math.cos(phase)
+    thigh_ref = amplitude_rad * phase_sin
+    calf_ref = amplitude_rad * math.sin(phase + math.pi / 2.0)
+    return phase_sin, phase_cos, thigh_ref, calf_ref
 
 
 class DM_Motor_Type(IntEnum):
@@ -673,6 +718,18 @@ signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
     try:
+        parser = argparse.ArgumentParser(description="Integrated Bennett single-leg policy sim2real for canid7/canid8.")
+        parser.add_argument("--policy", type=str, default=DEFAULT_POLICY, help="Exported TorchScript policy.pt path.")
+        # parser.add_argument("--policy_rate_hz", type=float, default=50.0, help="Policy inference rate.")
+        parser.add_argument("--policy_rate_hz", type=float, default=150.0, help="Policy inference rate.")
+        parser.add_argument("--output_scale", type=float, default=0.10, help="Extra safety scale for policy output.")
+        parser.add_argument("--amplitude_deg", type=float, default=20.0, help="Reference trajectory amplitude.")
+        parser.add_argument("--speed_deg_s", type=float, default=35.0, help="Reference max joint speed and command ramp.")
+        parser.add_argument("--warmup_s", type=float, default=2.0, help="Hold zero target before policy starts.")
+        parser.add_argument("--duration_s", type=float, default=0.0, help="Run duration. Use 0 for infinite.")
+        parser.add_argument("--tau_limit", type=float, default=1.2, help="Safety torque limit in Nm.")
+        args = parser.parse_args()
+
         init_data1= []
         init_data2 = []
         canid1=0x01
@@ -694,36 +751,36 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
         canid9=0x09
         mstid9=0x19
         #定义电机信息列表：
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 你的电机型号
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid1,
-                    mst_id=mstid1))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid2,
-                    mst_id=mstid2))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid3,
-                    mst_id=mstid3))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid4,
-                    mst_id=mstid4))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid5,
-                    mst_id=mstid5))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid6,
-                    mst_id=mstid6))
+        # init_data1.append(DmActData(
+        #             motorType=DM_Motor_Type.DM8006,  # 你的电机型号
+        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+        #             can_id=canid1,
+        #             mst_id=mstid1))
+        # init_data1.append(DmActData(
+        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+        #             can_id=canid2,
+        #             mst_id=mstid2))
+        # init_data1.append(DmActData(
+        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+        #             can_id=canid3,
+        #             mst_id=mstid3))
+        # init_data1.append(DmActData(
+        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+        #             can_id=canid4,
+        #             mst_id=mstid4))
+        # init_data1.append(DmActData(
+        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+        #             can_id=canid5,
+        #             mst_id=mstid5))
+        # init_data1.append(DmActData(
+        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+        #             can_id=canid6,
+        #             mst_id=mstid6))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
@@ -750,20 +807,43 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             loop_count = 0  #循环计数器
             fr_thigh_offset = 0.0   # FR_thigh 偏移量
             fr_calf_offset = 0.0   # FR_calf 偏移量
-            fr_key_step = 3.141592653589793 / 180.0  # 1deg joint per key press
+            fr_key_step = 3.141592653589793 / 180.0  # old: 1deg joint per key press
             # old: fr_limit = 40.0 * 3.141592653589793 / 180.0 # 真机跟随的关节偏移限幅：±40 deg
             # 新：单腿 policy 训练动作限幅是 ±20deg，真机端限幅同步收紧到 ±20deg。
             fr_limit = 20.0 * 3.141592653589793 / 180.0
-            udp_timeout_s = 0.5 # UDP 超时 0.5 秒
+            # old: udp_timeout_s = 0.5 # UDP 超时 0.5 秒
             # old: udp_tau_limit = 2.0 # UDP tau limit 2.0 Nm
             # 新：先收紧力矩保护，避免策略抖动时硬顶；如果负载正常运动误触发，再小幅提高。
-            udp_tau_limit = 1.2 # UDP tau limit 1.2 Nm
-            udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            udp_sock.bind(("127.0.0.1", 15001))
-            udp_sock.setblocking(False)
-            last_udp_time = time.monotonic()
-            got_first_udp = False
-            print("[UDP] listening on 127.0.0.1:15001; IsaacSim FR -> real RR canid7/canid8")
+            udp_tau_limit = args.tau_limit # old variable name kept; now used as integrated policy tau limit
+
+            try:
+                import torch
+            except ImportError as exc:
+                raise RuntimeError("damiao_3.py 集成 policy 需要当前 Python 环境安装 torch。") from exc
+
+            policy_path = Path(args.policy)
+            if not policy_path.exists():
+                raise FileNotFoundError(policy_path)
+            policy = torch.jit.load(str(policy_path), map_location="cpu")
+            policy.eval()
+
+            action_scale_rad = math.radians(20.0)
+            amplitude_rad = math.radians(args.amplitude_deg)
+            max_speed_rad_s = math.radians(args.speed_deg_s)
+            policy_dt = 1.0 / args.policy_rate_hz
+            next_policy_time = time.monotonic()
+            start_time = time.monotonic()
+            last_action = torch.zeros(2, dtype=torch.float32)
+            applied_offset = torch.zeros(2, dtype=torch.float32)
+            desired_offset = torch.zeros(2, dtype=torch.float32)
+            action = torch.zeros(2, dtype=torch.float32)
+
+            # 新：直接集成 policy，不再等 single_leg_policy_udp_runner_3.py 通过 UDP 发目标。
+            print(f"[POLICY-IN-DAMIAO] loaded: {policy_path}")
+            print(
+                f"[POLICY-IN-DAMIAO] rate={args.policy_rate_hz:.1f}Hz output_scale={args.output_scale:.3f} "
+                f"warmup_s={args.warmup_s:.1f} speed_limit={args.speed_deg_s:.1f}deg/s tau_limit={udp_tau_limit:.2f}Nm"
+            )
             while running.is_set():
                     #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
                     #damiao.py 300Hz > IsaacSim UDP 250Hz   这样 damiao.py 能更及时地拿到最新目标。
@@ -801,38 +881,66 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     # old: m3_target = -0.639  # 1.455 - 6 * radians(20deg)
                     # old: m4_target = -0.466  # 1.628 - 6 * radians(20deg)
 
-                    # 新：接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
-                    # q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
+                    # old: 接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
+                    # old: q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
+                    # 新：policy 直接集成在 damiao_3.py 内部，用真实 m7/m8 反馈构造 observation。
                     m7_default = 0.089  # canid7 的默认位置，实测值，保持不变
                     m8_default = 1.433
 
                     motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
                     motor8 = control.getMotor(canid8)
 
-                    while True:
-                        try:
-                            packet, _addr = udp_sock.recvfrom(4096)
-                        except BlockingIOError:
-                            break
-                        try:
-                            msg = json.loads(packet.decode("ascii"))
-                        except (json.JSONDecodeError, UnicodeDecodeError):
-                            continue
-                        if msg.get("leg") != "FR":
-                            continue
-                        fr_thigh_offset = float(msg.get("thigh_offset_rad", fr_thigh_offset))
-                        fr_calf_offset = float(msg.get("calf_offset_rad", fr_calf_offset))
-                        last_udp_time = time.monotonic()
-                        got_first_udp = True
+                    now = time.monotonic()
+                    elapsed_s = now - start_time
+                    if args.duration_s > 0.0 and elapsed_s >= args.duration_s:
+                        break
 
-                    fr_thigh_offset = max(-fr_limit, min(fr_limit, fr_thigh_offset))
-                    fr_calf_offset = max(-fr_limit, min(fr_limit, fr_calf_offset))
-                    udp_age = time.monotonic() - last_udp_time
-                    # old: 只打印 udp_age；UDP 断流后仍会继续保持旧目标，最后可能靠 tau 保护停机。
-                    # 新：收到过策略数据后，如果 UDP 超时，立即失能退出，问题会更早、更明确。
-                    if got_first_udp and udp_age > udp_timeout_s:
-                        control.disable_all()
-                        raise RuntimeError(f"udp timeout: no policy packet for {udp_age:.2f}s")
+                    real_thigh_offset = motor7.Get_Position() - m7_default
+                    real_calf_offset = -(motor8.Get_Position() - m8_default)
+                    real_thigh_vel = motor7.Get_Velocity()
+                    real_calf_vel = -motor8.Get_Velocity()
+
+                    if now >= next_policy_time:
+                        real_offset = torch.tensor([real_thigh_offset, real_calf_offset], dtype=torch.float32)
+                        real_vel = torch.tensor([real_thigh_vel, real_calf_vel], dtype=torch.float32)
+
+                        if elapsed_s < args.warmup_s:
+                            action = torch.zeros(2, dtype=torch.float32)
+                            desired_offset = torch.zeros(2, dtype=torch.float32)
+                        else:
+                            policy_elapsed_s = elapsed_s - args.warmup_s
+                            phase_sin, phase_cos, thigh_ref, calf_ref = build_reference(
+                                policy_elapsed_s, amplitude_rad, max_speed_rad_s
+                            )
+                            ref = torch.tensor([thigh_ref, calf_ref], dtype=torch.float32)
+                            tracking_error = real_offset - ref
+                            obs = torch.cat(
+                                (
+                                    torch.tensor([phase_sin, phase_cos], dtype=torch.float32),
+                                    ref,
+                                    tracking_error,
+                                    real_offset,
+                                    real_vel,
+                                    last_action,
+                                )
+                            ).unsqueeze(0)
+
+                            with torch.no_grad():
+                                action = policy(obs).squeeze(0).to(torch.float32).clamp(-1.0, 1.0)
+                            desired_offset = action * action_scale_rad * float(args.output_scale)
+
+                        desired_offset = torch.clamp(desired_offset, -fr_limit, fr_limit)
+                        max_delta = max_speed_rad_s * policy_dt
+                        delta = torch.clamp(desired_offset - applied_offset, -max_delta, max_delta)
+                        applied_offset += delta
+                        last_action = action.clone()
+
+                        next_policy_time += policy_dt
+                        if next_policy_time < now - policy_dt:
+                            next_policy_time = now + policy_dt
+
+                    fr_thigh_offset = float(applied_offset[0].item())
+                    fr_calf_offset = float(applied_offset[1].item())
 
                     q7_cmd = m7_default + 1.0 * fr_thigh_offset
                     q8_cmd = m8_default - 1.0 * fr_calf_offset
@@ -870,9 +978,10 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                         print(
                             # f"m1 pos:{motor1.Get_Position():.3f} vel:{motor1.Get_Velocity():.3f} err:{motor1.Get_err()} | "
                             # f"m2 pos:{motor2.Get_Position():.3f} vel:{motor2.Get_Velocity():.3f} err:{motor2.Get_err()} | "
-                            f"thigh_deg:{fr_thigh_offset * 180.0 / 3.141592653589793:+.1f} "
-                            f"calf_deg:{fr_calf_offset * 180.0 / 3.141592653589793:+.1f} "
-                            f"udp_age:{udp_age:.2f}s "
+                            f"target_deg:({math.degrees(fr_thigh_offset):+.1f},{math.degrees(fr_calf_offset):+.1f}) "
+                            f"desired_deg:({math.degrees(float(desired_offset[0].item())):+.1f},{math.degrees(float(desired_offset[1].item())):+.1f}) "
+                            f"real_deg:({math.degrees(real_thigh_offset):+.1f},{math.degrees(real_calf_offset):+.1f}) "
+                            f"action:({action[0].item():+.2f},{action[1].item():+.2f}) "
                             f"cmd7:{q7_cmd:.3f} cmd8:{q8_cmd:.3f} "
                             f"m7 pos:{motor7.Get_Position():.3f} vel:{motor7.Get_Velocity():.3f} tau:{motor7.Get_tau():.3f} err:{motor7.Get_err()} | "
                             f"m8 pos:{motor8.Get_Position():.3f} vel:{motor8.Get_Velocity():.3f} tau:{motor8.Get_tau():.3f} err:{motor8.Get_err()} | "

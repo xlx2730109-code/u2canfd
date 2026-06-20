@@ -1,4 +1,5 @@
-#原始文件
+# 原始文件
+# 已跑通八电机同步控制
 
 
 from __future__ import annotations

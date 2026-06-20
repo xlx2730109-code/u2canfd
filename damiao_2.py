@@ -1,6 +1,17 @@
 ﻿# 单腿RL policy sim2real
 # 当前 runner 是最小版本，主要用于第一次 policy sim2real。它没有从 damiao_2.py 反向读取真实电机反馈，而是用内部目标估计构造 observation。真闭环版本下一步要么把 policy 直接集成进 damiao_2.py，要么让 damiao_2.py 把 m7/m8 反馈再 UDP 发回 runner。当前先小输出验证 policy 动作链路。
 
+# 重新训练后，搜索policy，接着改动
+
+
+# 两个终端
+# python damiao_2.py
+# python E:\HuanCun\Desktop\u2canfd\single_leg_policy_udp_runner_2.py  --output_scale 1
+
+
+
+
+
 from __future__ import annotations
 
 import os

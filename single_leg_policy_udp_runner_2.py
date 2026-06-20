@@ -17,7 +17,11 @@ import torch
 
 
 DEFAULT_POLICY = (
-    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
+    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-23-57\exported\policy.pt"   #100Hz
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
+
 )
 
 
@@ -38,7 +42,9 @@ def main() -> None:
     parser.add_argument("--udp_target", type=str, default="127.0.0.1:15001", help="UDP target host:port.")
     parser.add_argument("--rate_hz", type=float, default=50.0, help="Policy update and UDP send rate.")
     parser.add_argument("--amplitude_deg", type=float, default=20.0, help="Reference trajectory amplitude.")
-    parser.add_argument("--speed_deg_s", type=float, default=35.0, help="Reference max joint speed.")
+    # old: default=35.0，沿用手动键盘测试速度；较大输出幅度时 target 会明显落后 desired。
+    # 新：默认放宽到 80deg/s；仍可用 --speed_deg_s 手动覆盖。
+    parser.add_argument("--speed_deg_s", type=float, default=80.0, help="Reference max joint speed.")
     parser.add_argument(
         "--output_scale",
         type=float,
