@@ -1,15 +1,15 @@
-﻿# 单腿RL policy sim2real
-# 把 policy 集成进 damiao_3.py
+﻿# 四腿RL policy sim2real
+# 把 policy 集成进 damiao_4.py
 # 优点：单进程，理论延迟低。
 # 缺点：达妙 DLL + Torch + conda 环境混在一起，很容易出现 DLL、Python 版本、USB 库冲突。现在不建议。
 # 改两处：
-# damiao_3.py：每隔比如 50Hz 或 100Hz 把 m7/m8 真实反馈 UDP 发到 127.0.0.1:15002。
+# damiao_4.py：每隔比如 50Hz 或 100Hz 把 m7/m8 真实反馈 UDP 发到 127.0.0.1:15002。
 # single_leg_policy_udp_runner.py：绑定 15002 接收反馈，用真实反馈构造 observation。
 
 # 重新训练后，搜索policy，接着改动
 
 # 终端直接输入
-# D:\Conda\envs\env_isaaclab\python.exe .\damiao_3.py --policy_rate_hz 50 --output_scale 1
+# D:\Conda\envs\env_isaaclab\python.exe .\damiao_4.py --policy_rate_hz 50 --output_scale 1
 
 
 from __future__ import annotations
@@ -71,12 +71,29 @@ if _dmcan_user_site is not None and _dmcan_user_site in sys.path:
     sys.path.remove(_dmcan_user_site)
 
 
-DEFAULT_POLICY = (
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz
-    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-23-57\exported\policy.pt"   #100Hz
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
+DEFAULT_POLICY = r"D:\IsaacLab\logs\rsl_rl\Bennett_test4_go2_flat\2026-06-20_11-40-10\exported\policy.pt"
+
+
+# Training policy joint/action order from params/env.yaml.
+POLICY_JOINT_NAMES = (
+    "FL_thigh",
+    "FL_calf",
+    "FR_thigh",
+    "FR_calf",
+    "RL_thigh",
+    "RL_calf",
+    "RR_thigh",
+    "RR_calf",
 )
+
+# Real motor order used by this script. Edit signs/scales if your latest calibration differs.
+MOTOR_CAN_IDS = (1, 2, 3, 4, 5, 6, 7, 8)
+MOTOR_DEFAULTS = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+MOTOR_SIGNS = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+MOTOR_SCALES = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+
+# Isaac Lab JointPositionAction used scale=0.25 rad with use_default_offset=True.
+POLICY_ACTION_SCALE_RAD = 0.25
 
 
 def build_reference(elapsed_s: float, amplitude_rad: float, max_speed_rad_s: float) -> tuple[float, float, float, float]:
@@ -716,8 +733,266 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
+def _parse_float_list(text: str, expected_len: int, name: str) -> tuple[float, ...]:
+    values = tuple(float(item.strip()) for item in text.split(",") if item.strip())
+    if len(values) != expected_len:
+        raise ValueError(f"{name} expects {expected_len} comma-separated values, got {len(values)}: {text!r}")
+    return values
+
+
+def _parse_host_port(text: str) -> tuple[str, int]:
+    host, port_text = text.rsplit(":", 1)
+    return host, int(port_text)
+
+
+class ImuUdpReceiver:
+    """Receive IMU observations as JSON: base_ang_vel and projected_gravity, each length 3."""
+
+    def __init__(self, bind: str):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(_parse_host_port(bind))
+        self.sock.setblocking(False)
+        self.last_packet_time = 0.0
+        self.base_ang_vel = (0.0, 0.0, 0.0)
+        self.projected_gravity = (0.0, 0.0, -1.0)
+
+    def update(self) -> None:
+        while True:
+            try:
+                packet, _addr = self.sock.recvfrom(4096)
+            except BlockingIOError:
+                break
+            try:
+                msg = json.loads(packet.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            base_ang_vel = msg.get("base_ang_vel", msg.get("gyro"))
+            projected_gravity = msg.get("projected_gravity", msg.get("gravity"))
+            if isinstance(base_ang_vel, list) and len(base_ang_vel) == 3:
+                self.base_ang_vel = tuple(float(v) for v in base_ang_vel)
+            if isinstance(projected_gravity, list) and len(projected_gravity) == 3:
+                self.projected_gravity = tuple(float(v) for v in projected_gravity)
+            self.last_packet_time = time.monotonic()
+
+    def read(self, timeout_s: float) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+        self.update()
+        if self.last_packet_time <= 0.0:
+            raise RuntimeError("no IMU UDP packet received yet")
+        age = time.monotonic() - self.last_packet_time
+        if age > timeout_s:
+            raise RuntimeError(f"IMU UDP timeout: last packet age {age:.3f}s")
+        return self.base_ang_vel, self.projected_gravity
+
+
+def _read_imu_observation(args, imu_receiver: ImuUdpReceiver | None):
+    if args.imu_mode == "upright":
+        return (0.0, 0.0, 0.0), (0.0, 0.0, -1.0)
+    if imu_receiver is None:
+        raise RuntimeError("imu_mode=udp requires an IMU receiver")
+    return imu_receiver.read(args.imu_timeout_s)
+
+
+def run_full_body_policy() -> None:
+    parser = argparse.ArgumentParser(description="Integrated Bennett 8DOF flat policy sim2real.")
+    parser.add_argument("--policy", type=str, default=DEFAULT_POLICY, help="Exported TorchScript policy.pt path.")
+    parser.add_argument("--policy_rate_hz", type=float, default=50.0, help="Policy inference rate. Training run used 50Hz.")
+    parser.add_argument("--mit_rate_hz", type=float, default=300.0, help="MIT command send rate.")
+    parser.add_argument("--output_scale", type=float, default=0.05, help="Extra safety scale for policy output.")
+    parser.add_argument("--speed_deg_s", type=float, default=35.0, help="Joint target ramp limit.")
+    parser.add_argument("--warmup_s", type=float, default=2.0, help="Hold zero offset before policy starts.")
+    parser.add_argument("--duration_s", type=float, default=0.0, help="Run duration. Use 0 for infinite.")
+    parser.add_argument("--tau_limit", type=float, default=1.2, help="Per-motor safety torque limit in Nm.")
+    parser.add_argument("--kp", type=float, default=35.0, help="MIT position stiffness.")
+    parser.add_argument("--kd", type=float, default=1.5, help="MIT damping.")
+    parser.add_argument("--joint_limit_deg", type=float, default=20.0, help="Clamp applied joint offset from calibrated zero.")
+    parser.add_argument("--startup_pos_limit_deg", type=float, default=8.0, help="Abort if any motor starts far from its default.")
+    parser.add_argument("--command_x", type=float, default=0.0, help="Policy velocity command vx, m/s.")
+    parser.add_argument("--command_y", type=float, default=0.0, help="Policy velocity command vy, m/s.")
+    parser.add_argument("--command_yaw", type=float, default=0.0, help="Policy yaw-rate command, rad/s.")
+    parser.add_argument("--motor_defaults", type=str, default=",".join(str(v) for v in MOTOR_DEFAULTS))
+    parser.add_argument("--motor_signs", type=str, default=",".join(str(v) for v in MOTOR_SIGNS))
+    parser.add_argument("--motor_scales", type=str, default=",".join(str(v) for v in MOTOR_SCALES))
+    parser.add_argument("--imu_mode", choices=("upright", "udp"), default="upright")
+    parser.add_argument("--imu_udp_bind", type=str, default="127.0.0.1:15010")
+    parser.add_argument("--imu_timeout_s", type=float, default=0.2)
+    parser.add_argument("--dry_run", action="store_true", help="Run policy and print commands without sending MIT commands.")
+    args = parser.parse_args()
+
+    motor_defaults = _parse_float_list(args.motor_defaults, 8, "--motor_defaults")
+    motor_signs = _parse_float_list(args.motor_signs, 8, "--motor_signs")
+    motor_scales = _parse_float_list(args.motor_scales, 8, "--motor_scales")
+    if any(abs(v) < 1.0e-6 for v in motor_scales):
+        raise ValueError("--motor_scales cannot contain zero")
+
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError("damiao_4.py needs torch in the current Python environment.") from exc
+
+    policy_path = Path(args.policy)
+    if not policy_path.exists():
+        raise FileNotFoundError(policy_path)
+    policy = torch.jit.load(str(policy_path), map_location="cpu")
+    policy.eval()
+
+    init_data1 = []
+    for can_id in MOTOR_CAN_IDS:
+        init_data1.append(
+            DmActData(
+                motorType=DM_Motor_Type.DM8006,
+                mode=Control_Mode.MIT_MODE,
+                can_id=can_id,
+                mst_id=0x10 + can_id,
+            )
+        )
+
+    imu_receiver = ImuUdpReceiver(args.imu_udp_bind) if args.imu_mode == "udp" else None
+    device_sn = "D6977F56F86C64B77B316E7154FA6DF3"
+    policy_dt = 1.0 / args.policy_rate_hz
+    mit_dt = 1.0 / args.mit_rate_hz
+    max_delta = math.radians(args.speed_deg_s) * policy_dt
+    joint_limit_rad = math.radians(args.joint_limit_deg)
+    startup_pos_limit_rad = math.radians(args.startup_pos_limit_deg)
+    command = torch.tensor([args.command_x, args.command_y, args.command_yaw], dtype=torch.float32)
+
+    with Motor_Control(1000000, 5000000, device_sn, init_data1, device_type=None) as control:
+        motors = [control.getMotor(can_id) for can_id in MOTOR_CAN_IDS]
+        if any(motor is None for motor in motors):
+            raise RuntimeError("failed to register all motors 1-8")
+
+        time.sleep(0.1)
+        for motor in motors:
+            control.refresh_motor_status(motor)
+            time.sleep(0.005)
+
+        start_offsets = [
+            motor_signs[i] * (motors[i].Get_Position() - motor_defaults[i]) * motor_scales[i]
+            for i in range(8)
+        ]
+        max_start = max(abs(v) for v in start_offsets)
+        if max_start > startup_pos_limit_rad:
+            control.disable_all()
+            raise RuntimeError(
+                f"startup joint offset too large: {math.degrees(max_start):.2f}deg > "
+                f"{args.startup_pos_limit_deg:.2f}deg"
+            )
+
+        last_action = torch.zeros(8, dtype=torch.float32)
+        applied_offset = torch.zeros(8, dtype=torch.float32)
+        desired_offset = torch.zeros(8, dtype=torch.float32)
+        action = torch.zeros(8, dtype=torch.float32)
+        next_policy_time = time.monotonic()
+        start_time = time.monotonic()
+        loop_count = 0
+
+        print(f"[FULL-BODY-POLICY] loaded: {policy_path}")
+        print(f"[FULL-BODY-POLICY] joints={POLICY_JOINT_NAMES}")
+        print(
+            f"[FULL-BODY-POLICY] policy={args.policy_rate_hz:.1f}Hz MIT={args.mit_rate_hz:.1f}Hz "
+            f"output_scale={args.output_scale:.3f} command=({args.command_x:.2f},{args.command_y:.2f},{args.command_yaw:.2f})"
+        )
+        if args.imu_mode == "upright":
+            print("[WARN] imu_mode=upright uses base_ang_vel=(0,0,0), projected_gravity=(0,0,-1). Do not use this for real walking.")
+        elif imu_receiver is not None:
+            print(f"[IMU] listening UDP on {args.imu_udp_bind}")
+        if args.dry_run:
+            print("[DRY-RUN] MIT commands will not be sent.")
+
+        while running.is_set():
+            current_time = time.perf_counter()
+            now = time.monotonic()
+            elapsed_s = now - start_time
+            loop_count += 1
+            if args.duration_s > 0.0 and elapsed_s >= args.duration_s:
+                break
+
+            joint_pos = torch.tensor(
+                [
+                    motor_signs[i] * (motors[i].Get_Position() - motor_defaults[i]) * motor_scales[i]
+                    for i in range(8)
+                ],
+                dtype=torch.float32,
+            )
+            joint_vel = torch.tensor(
+                [motor_signs[i] * motors[i].Get_Velocity() * motor_scales[i] for i in range(8)],
+                dtype=torch.float32,
+            )
+
+            if now >= next_policy_time:
+                if elapsed_s < args.warmup_s:
+                    action = torch.zeros(8, dtype=torch.float32)
+                    desired_offset = torch.zeros(8, dtype=torch.float32)
+                else:
+                    base_ang_vel, projected_gravity = _read_imu_observation(args, imu_receiver)
+                    obs = torch.cat(
+                        (
+                            torch.tensor(base_ang_vel, dtype=torch.float32),
+                            torch.tensor(projected_gravity, dtype=torch.float32),
+                            command,
+                            joint_pos,
+                            joint_vel,
+                            last_action,
+                        )
+                    ).unsqueeze(0)
+                    if obs.shape != (1, 33):
+                        raise RuntimeError(f"unexpected observation shape: {tuple(obs.shape)}")
+                    with torch.no_grad():
+                        action = policy(obs).squeeze(0).to(torch.float32).clamp(-1.0, 1.0)
+                    if action.numel() != 8:
+                        raise RuntimeError(f"unexpected policy action shape: {tuple(action.shape)}")
+                    desired_offset = action * POLICY_ACTION_SCALE_RAD * float(args.output_scale)
+
+                desired_offset = torch.clamp(desired_offset, -joint_limit_rad, joint_limit_rad)
+                delta = torch.clamp(desired_offset - applied_offset, -max_delta, max_delta)
+                applied_offset += delta
+                last_action = action.clone()
+                next_policy_time += policy_dt
+                if next_policy_time < now - policy_dt:
+                    next_policy_time = now + policy_dt
+
+            q_cmds = [
+                motor_defaults[i] + motor_signs[i] * float(applied_offset[i].item()) / motor_scales[i]
+                for i in range(8)
+            ]
+
+            for i, motor in enumerate(motors):
+                err = motor.Get_err()
+                tau = motor.Get_tau()
+                if err not in (0, 1):
+                    control.disable_all()
+                    raise RuntimeError(f"motor error: canid={MOTOR_CAN_IDS[i]} err={err}")
+                if loop_count > 100 and abs(tau) > args.tau_limit:
+                    control.disable_all()
+                    raise RuntimeError(f"tau too high: canid={MOTOR_CAN_IDS[i]} tau={tau:.3f}")
+                if not args.dry_run:
+                    control.control_mit(motor, args.kp, args.kd, q_cmds[i], 0.0, 0.0)
+
+            if loop_count % max(1, int(args.mit_rate_hz)) == 0:
+                target_deg = [math.degrees(float(v)) for v in applied_offset.tolist()]
+                pos_deg = [math.degrees(float(v)) for v in joint_pos.tolist()]
+                tau_text = ",".join(f"{motor.Get_tau():+.2f}" for motor in motors)
+                print(
+                    f"t={elapsed_s:6.2f}s "
+                    f"target_deg={[round(v, 2) for v in target_deg]} "
+                    f"pos_deg={[round(v, 2) for v in pos_deg]} "
+                    f"action={[round(float(v), 3) for v in action.tolist()]} "
+                    f"tau=[{tau_text}]",
+                    flush=True,
+                )
+
+            sleep_till = current_time + mit_dt
+            sleep_now = time.perf_counter()
+            if sleep_till > sleep_now:
+                time.sleep(sleep_till - sleep_now)
+
+        control.disable_all()
+
+
 if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
     try:
+        run_full_body_policy()
+        raise SystemExit
+
         parser = argparse.ArgumentParser(description="Integrated Bennett single-leg policy sim2real for canid7/canid8.")
         parser.add_argument("--policy", type=str, default=DEFAULT_POLICY, help="Exported TorchScript policy.pt path.")
         # parser.add_argument("--policy_rate_hz", type=float, default=50.0, help="Policy inference rate.")
@@ -884,8 +1159,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     # old: 接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
                     # old: q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
                     # 新：policy 直接集成在 damiao_3.py 内部，用真实 m7/m8 反馈构造 observation。
-                    m7_default = 0.000  # canid7 的默认位置，实测值，保持不变
-                    m8_default = 0
+                    m7_default = 0.089  # canid7 的默认位置，实测值，保持不变
+                    m8_default = 1.433
 
                     motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
                     motor8 = control.getMotor(canid8)
