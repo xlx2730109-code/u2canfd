@@ -1,5 +1,8 @@
 ﻿# 单腿RL policy sim2real
-# 当前 runner 是最小版本，主要用于第一次 policy sim2real。它没有从 damiao_2.py 反向读取真实电机反馈，而是用内部目标估计构造 observation。真闭环版本下一步要么把 policy 直接集成进 damiao_2.py，要么让 damiao_2.py 把 m7/m8 反馈再 UDP 发回 runner。当前先小输出验证 policy 动作链路。
+# 当前 runner 是最小版本，主要用于第一次 policy sim2real。
+# 它没有从 damiao_2.py 反向读取真实电机反馈，而是用内部目标估计构造 observation。
+# 真闭环版本下一步要么把 policy 直接集成进 damiao_2.py，要么让 damiao_2.py 把 m7/m8 反馈再 UDP 发回 runner。
+# 当前先小输出验证 policy 动作链路。
 
 # 重新训练后，搜索policy，接着改动
 
@@ -778,7 +781,7 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             while running.is_set():
                     #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
                     #damiao.py 300Hz > IsaacSim UDP 250Hz   这样 damiao.py 能更及时地拿到最新目标。
-                    desired_duration = 1/300  # 秒
+                    desired_duration = 1/1000  # 秒
                     current_time = time.perf_counter()
                     loop_count += 1
 

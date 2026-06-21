@@ -2,7 +2,10 @@
 
 # 先运行 python damiao_1.py 来控制电机，确保电机连接正确并且驱动安装好。这个脚本会初始化电机控制器，并在循环中发送控制命令。
 # 再运行 python source\isaaclab_tasks\isaaclab_tasks\manager_based\locomotion\velocity\config\bennett_test4\bennett_single_leg_ik_trace.py 来发送 UDP 数据包控制电机。
-# 打开的isaacsim场景是 bennett_single_leg_ik_trace.usd，里面有一个单腿 Bennett 机器人，UDP 数据包里包含了 FR_thigh 和 FR_calf 的目标位置偏移，isaac sim 里会根据这个偏移计算出 FR_thigh 和 FR_calf 的目标位置，并通过 UDP 发给 damiao_1.py 来控制真机的 FR_thigh 和 FR_calf 跟随。你可以在 isaac sim 里按键来调整 FR_thigh 和 FR_calf 的偏移，观察真机的跟随效果。
+# 打开的isaacsim场景是 bennett_single_leg_ik_trace.usd，里面有一个单腿 Bennett 机器人，
+# UDP 数据包里包含了 FR_thigh 和 FR_calf 的目标位置偏移，isaac sim 里会根据这个偏移计算出 FR_thigh 和 FR_calf 的目标位置，
+# 并通过 UDP 发给 damiao_1.py 来控制真机的 FR_thigh 和 FR_calf 跟随。你可以在 isaac sim 里按键来调整 FR_thigh 和 FR_calf 的偏移，
+# 观察真机的跟随效果。
 
 from __future__ import annotations
 
@@ -765,7 +768,7 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             while running.is_set():
                     #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
                     #damiao.py 300Hz > IsaacSim UDP 250Hz   这样 damiao.py 能更及时地拿到最新目标。
-                    desired_duration = 1/300  # 秒
+                    desired_duration = 1/1000  # 秒
                     current_time = time.perf_counter()
                     loop_count += 1
 
@@ -774,30 +777,6 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     # control.control_mit(control.getMotor(canid2), 0.0, 1.0, 0.0, 0.7, 0)
                     # control.control_mit(control.getMotor(canid3), 0.0, 1.5, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid4), 0.0, 1.5, 0.0, 0.7, 0)
-
-                    # old: 只读 canid3/canid4 位置，用来记录默认姿态
-                    # control.refresh_motor_status(control.getMotor(canid3))
-                    # control.refresh_motor_status(control.getMotor(canid4))
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 3 度慢速往返
-                    # old: 3deg joint = 6 * 0.05236 = 0.314rad motor
-                    # old: m3_target = 1.141  # 1.455 - 6 * radians(3deg)
-                    # old: m4_target = 1.314  # 1.628 - 6 * radians(3deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 8 度慢速往返
-                    # old: 8deg joint = 6 * 0.13963 = 0.838rad motor
-                    # old: m3_target = 0.617  # 1.455 - 6 * radians(8deg)
-                    # old: m4_target = 0.790  # 1.628 - 6 * radians(8deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 14 度慢速往返
-                    # old: 14deg joint = 6 * 0.24435 = 1.466rad motor
-                    # old: m3_target = -0.011  # 1.455 - 6 * radians(14deg)
-                    # old: m4_target = 0.162  # 1.628 - 6 * radians(14deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 20 度慢速往返
-                    # old: 20deg joint = 6 * 0.34907 = 2.094rad motor
-                    # old: m3_target = -0.639  # 1.455 - 6 * radians(20deg)
-                    # old: m4_target = -0.466  # 1.628 - 6 * radians(20deg)
 
                     # 新：接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
                     # q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6

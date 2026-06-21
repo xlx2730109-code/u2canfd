@@ -73,9 +73,9 @@ if _dmcan_user_site is not None and _dmcan_user_site in sys.path:
 
 DEFAULT_POLICY = (
     # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
+    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
     # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-23-57\exported\policy.pt"   #100Hz
-    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
 )
 
 
@@ -751,36 +751,36 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
         canid9=0x09
         mstid9=0x19
         #定义电机信息列表：
-        # init_data1.append(DmActData(
-        #             motorType=DM_Motor_Type.DM8006,  # 你的电机型号
-        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-        #             can_id=canid1,
-        #             mst_id=mstid1))
-        # init_data1.append(DmActData(
-        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-        #             can_id=canid2,
-        #             mst_id=mstid2))
-        # init_data1.append(DmActData(
-        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-        #             can_id=canid3,
-        #             mst_id=mstid3))
-        # init_data1.append(DmActData(
-        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-        #             can_id=canid4,
-        #             mst_id=mstid4))
-        # init_data1.append(DmActData(
-        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-        #             can_id=canid5,
-        #             mst_id=mstid5))
-        # init_data1.append(DmActData(
-        #             motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-        #             mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-        #             can_id=canid6,
-        #             mst_id=mstid6))
+        init_data1.append(DmActData(
+                    motorType=DM_Motor_Type.DM8006,  # 你的电机型号
+                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+                    can_id=canid1,
+                    mst_id=mstid1))
+        init_data1.append(DmActData(
+                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+                    can_id=canid2,
+                    mst_id=mstid2))
+        init_data1.append(DmActData(
+                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+                    can_id=canid3,
+                    mst_id=mstid3))
+        init_data1.append(DmActData(
+                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+                    can_id=canid4,
+                    mst_id=mstid4))
+        init_data1.append(DmActData(
+                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+                    can_id=canid5,
+                    mst_id=mstid5))
+        init_data1.append(DmActData(
+                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
+                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
+                    can_id=canid6,
+                    mst_id=mstid6))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
@@ -847,7 +847,7 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             while running.is_set():
                     #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
                     #damiao.py 300Hz > IsaacSim UDP 250Hz   这样 damiao.py 能更及时地拿到最新目标。
-                    desired_duration = 1/300  # 秒
+                    desired_duration = 1/1000  # 秒
                     current_time = time.perf_counter()
                     loop_count += 1
 

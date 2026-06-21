@@ -662,7 +662,7 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
     try:
         init_data1= []
         init_data2 = []
@@ -730,6 +730,8 @@ if __name__ == "__main__":
         device_sn = "D6977F56F86C64B77B316E7154FA6DF3"
         #CANFD 波特率 1000000 是仲裁段 1M，5000000 是数据段 5M。你、按文档 5M 就保持这样。初始化电机控制结构体
         with Motor_Control(1000000, 5000000, device_sn, init_data1,device_type=None) as control:
+            # 把电机“当前所在的位置”写成 0 位。即先手动把电机摆到想要的机械零位，然后执行这一句
+            # 执行完后，再读这个电机位置，理论上 Get_Position() 会接近 0.000
             # control.set_zero_position(control.getMotor(canid1)) # 设置电机零位
             # control.set_zero_position(control.getMotor(canid2))
             # control.set_zero_position(control.getMotor(canid3))
@@ -738,9 +740,8 @@ if __name__ == "__main__":
             # control.set_zero_position(control.getMotor(canid6))
             # control.set_zero_position(control.getMotor(canid7))
             # control.set_zero_position(control.getMotor(canid8))
-            # control.set_zero_position(control.getMotor(canid9))
             while running.is_set():
-                    desired_duration = 1/300  # 秒
+                    desired_duration = 1/1000  # 秒
                     current_time = time.perf_counter()
 
                     # control.control_mit(control.getMotor(0,canid3), 0.0, 0.0, 0.0, 0.0, 0.0)
