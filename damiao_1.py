@@ -752,7 +752,6 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             # control.set_zero_position(control.getMotor(canid6))
             # control.set_zero_position(control.getMotor(canid7))
             # control.set_zero_position(control.getMotor(canid8))
-            # control.set_zero_position(control.getMotor(canid9))
             loop_count = 0  #循环计数器
             fr_thigh_offset = 0.0   # FR_thigh 偏移量
             fr_calf_offset = 0.0   # FR_calf 偏移量
@@ -780,8 +779,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
 
                     # 新：接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
                     # q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
-                    m7_default = 0.089  # canid7 的默认位置，实测值，保持不变
-                    m8_default = 1.433
+                    m7_default = 0.000  # canid7 的默认位置，实测值，保持不变
+                    m8_default = 0.000
 
                     motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
                     motor8 = control.getMotor(canid8)

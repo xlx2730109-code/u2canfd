@@ -740,14 +740,30 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             # control.set_zero_position(control.getMotor(canid6))
             # control.set_zero_position(control.getMotor(canid7))
             # control.set_zero_position(control.getMotor(canid8))
+            # 零位标定时不执行后面的控制循环，直接退出程序。标定完成后再注释掉下面的代码，重新运行程序进入控制循环。
+            # 直接取消注释下面的代码是看电机当前角度，需要标定再取消注释上面的
+            # time.sleep(0.1)
+            # for id in range(1, 9):
+            #     motor = control.getMotor(id)
+            #     control.refresh_motor_status(motor)
+            #     time.sleep(0.02)
+            #     print(
+            #         # f"canid:{id} pos:{motor.Get_Position():.6f} "
+            #         f"canid:{id} pos:{motor.Get_Position():.6f} rad "
+            #         f"deg:{motor.Get_Position() * 57.2958:.2f} "
+            #         f"vel:{motor.Get_Velocity():.3f} "
+            #         f"tau:{motor.Get_tau():.3f} "
+            #         f"err:{motor.Get_err()}",
+            #         file=sys.stderr,
+            #     )
+            # control.disable_all()
+            # raise SystemExit
             while running.is_set():
                     desired_duration = 1/1000  # 秒
                     current_time = time.perf_counter()
 
                     # control.control_mit(control.getMotor(0,canid3), 0.0, 0.0, 0.0, 0.0, 0.0)
                     # control.control_mit(control.getMotor(1,canid4), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid1), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid2), 0.0, 0.0, 0.0, 0.0, 0.0)
 
                     control.control_mit(control.getMotor(canid1), 0.0, 1.50, 0.0, 0.5, 0.0)
                     control.control_mit(control.getMotor(canid2), 0.0, 1.50, 0.0, 0.5, 0.0)
@@ -757,6 +773,7 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     control.control_mit(control.getMotor(canid6), 0.0, 1.50, 0.0, 0.5, 0.0)
                     control.control_mit(control.getMotor(canid7), 0.0, 1.50, 0.0, 0.5, 0.0)
                     control.control_mit(control.getMotor(canid8), 0.0, 1.50, 0.0, 0.5, 0.0)
+                    # 打印每个电机的：pos, vel, tau, err, interval  用于看当前位置、速度、力矩和错误码
                     # for id in range(1,10): 
                     #     pos = control.getMotor(id).Get_Position()
                     #     vel = control.getMotor(id).Get_Velocity()
@@ -773,10 +790,15 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     #     f"canid is: {6} pos: {control.getMotor(canid6).Get_Position():.6f} "
                     #     f"canid is: {7} pos: {control.getMotor(canid7).Get_Position():.6f} "
                     #     f"canid is: {8} pos: {control.getMotor(canid8).Get_Position():.6f} "
-                    #     f"canid is: {9} pos: {control.getMotor(canid9).Get_Position():.6f}",
                     #     file=sys.stderr
                     # )     
+                    #
+                    sleep_till = current_time + desired_duration
+                    now = time.perf_counter()
+                    if sleep_till > now:
+                        time.sleep(sleep_till - now)
 
         print("The program exited safely.") 
     except Exception as e:
         print(f"Error: hardware interface exception: {e}", file=sys.stderr)
+
