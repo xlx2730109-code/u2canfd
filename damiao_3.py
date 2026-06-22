@@ -72,8 +72,8 @@ if _dmcan_user_site is not None and _dmcan_user_site in sys.path:
 
 
 DEFAULT_POLICY = (
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz
-    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
+    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
     # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-23-57\exported\policy.pt"   #100Hz
     # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
 )
@@ -720,8 +720,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
     try:
         parser = argparse.ArgumentParser(description="Integrated Bennett single-leg policy sim2real for canid7/canid8.")
         parser.add_argument("--policy", type=str, default=DEFAULT_POLICY, help="Exported TorchScript policy.pt path.")
-        # parser.add_argument("--policy_rate_hz", type=float, default=50.0, help="Policy inference rate.")
-        parser.add_argument("--policy_rate_hz", type=float, default=150.0, help="Policy inference rate.")
+        parser.add_argument("--policy_rate_hz", type=float, default=50.0, help="Policy inference rate.")
+        # parser.add_argument("--policy_rate_hz", type=float, default=150.0, help="Policy inference rate.")
         parser.add_argument("--output_scale", type=float, default=0.10, help="Extra safety scale for policy output.")
         parser.add_argument("--amplitude_deg", type=float, default=20.0, help="Reference trajectory amplitude.")
         parser.add_argument("--speed_deg_s", type=float, default=35.0, help="Reference max joint speed and command ramp.")
