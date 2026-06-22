@@ -834,15 +834,35 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             next_policy_time = time.monotonic()
             start_time = time.monotonic()
             last_action = torch.zeros(2, dtype=torch.float32)
-            applied_offset = torch.zeros(2, dtype=torch.float32)
-            desired_offset = torch.zeros(2, dtype=torch.float32)
             action = torch.zeros(2, dtype=torch.float32)
+
+            m7_default = 0.000  # canid7 的默认位置，实测值，保持不变
+            m8_default = 0.000
+
+            motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
+            motor8 = control.getMotor(canid8)
+            # 先用阻尼模式刷新反馈，不发位置拉回命令；然后把当前真实偏移作为第一帧 applied_offset。
+            for _ in range(30):
+                control.refresh_motor_status(motor7)
+                control.refresh_motor_status(motor8)
+                control.control_mit(motor7, 0.0, 1.5, 0.0, 0.0, 0.0)
+                control.control_mit(motor8, 0.0, 1.5, 0.0, 0.0, 0.0)
+                time.sleep(0.01)
+            real_thigh_offset = motor7.Get_Position() - m7_default
+            real_calf_offset = -(motor8.Get_Position() - m8_default)
+            applied_offset = torch.tensor([real_thigh_offset, real_calf_offset], dtype=torch.float32)
+            desired_offset = applied_offset.clone()
 
             # 新：直接集成 policy，不再等 single_leg_policy_udp_runner_3.py 通过 UDP 发目标。
             print(f"[POLICY-IN-DAMIAO] loaded: {policy_path}")
             print(
                 f"[POLICY-IN-DAMIAO] rate={args.policy_rate_hz:.1f}Hz output_scale={args.output_scale:.3f} "
                 f"warmup_s={args.warmup_s:.1f} speed_limit={args.speed_deg_s:.1f}deg/s tau_limit={udp_tau_limit:.2f}Nm"
+            )
+            print(
+                f"[SAFE-START] initial_offset_deg=({math.degrees(real_thigh_offset):+.2f},"
+                f"{math.degrees(real_calf_offset):+.2f}); will ramp toward zero during warmup",
+                file=sys.stderr,
             )
             while running.is_set():
                     #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
@@ -856,39 +876,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     # control.control_mit(control.getMotor(canid2), 0.0, 1.0, 0.0, 0.7, 0)
                     # control.control_mit(control.getMotor(canid3), 0.0, 1.5, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid4), 0.0, 1.5, 0.0, 0.7, 0)
-
-                    # old: 只读 canid3/canid4 位置，用来记录默认姿态
-                    # control.refresh_motor_status(control.getMotor(canid3))
-                    # control.refresh_motor_status(control.getMotor(canid4))
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 3 度慢速往返
-                    # old: 3deg joint = 6 * 0.05236 = 0.314rad motor
-                    # old: m3_target = 1.141  # 1.455 - 6 * radians(3deg)
-                    # old: m4_target = 1.314  # 1.628 - 6 * radians(3deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 8 度慢速往返
-                    # old: 8deg joint = 6 * 0.13963 = 0.838rad motor
-                    # old: m3_target = 0.617  # 1.455 - 6 * radians(8deg)
-                    # old: m4_target = 0.790  # 1.628 - 6 * radians(8deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 14 度慢速往返
-                    # old: 14deg joint = 6 * 0.24435 = 1.466rad motor
-                    # old: m3_target = -0.011  # 1.455 - 6 * radians(14deg)
-                    # old: m4_target = 0.162  # 1.628 - 6 * radians(14deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 20 度慢速往返
-                    # old: 20deg joint = 6 * 0.34907 = 2.094rad motor
-                    # old: m3_target = -0.639  # 1.455 - 6 * radians(20deg)
-                    # old: m4_target = -0.466  # 1.628 - 6 * radians(20deg)
-
-                    # old: 接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
-                    # old: q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
+                    
                     # 新：policy 直接集成在 damiao_3.py 内部，用真实 m7/m8 反馈构造 observation。
-                    m7_default = 0.000  # canid7 的默认位置，实测值，保持不变
-                    m8_default = 0
-
-                    motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
-                    motor8 = control.getMotor(canid8)
 
                     now = time.monotonic()
                     elapsed_s = now - start_time

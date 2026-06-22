@@ -685,6 +685,15 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
+def move_towards_abs(current: float, target: float, max_step: float) -> float:
+    diff = target - current
+    if diff > max_step:
+        return current + max_step
+    if diff < -max_step:
+        return current - max_step
+    return target
+
+
 if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
     try:
         init_data1= []
@@ -768,6 +777,7 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             # old: fr_limit = 40.0 * 3.141592653589793 / 180.0 # 真机跟随的关节偏移限幅：±40 deg
             # 新：单腿 policy 训练动作限幅是 ±20deg，真机端限幅同步收紧到 ±20deg。
             fr_limit = 20.0 * 3.141592653589793 / 180.0
+            return_speed_rad_s = 55.0 * 3.141592653589793 / 180.0  # 绝对电机命令限速：5 deg/s，避免启动猛拉回零
             udp_timeout_s = 0.5 # UDP 超时 0.5 秒
             # old: udp_tau_limit = 2.0 # UDP tau limit 2.0 Nm
             # 新：先收紧力矩保护，避免策略抖动时硬顶；如果负载正常运动误触发，再小幅提高。
@@ -777,6 +787,24 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             udp_sock.setblocking(False)
             last_udp_time = time.monotonic()
             got_first_udp = False
+            m7_default = 0.0  # canid7 的默认位置，实测值，保持不变
+            m8_default = 0.0
+            motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
+            motor8 = control.getMotor(canid8)
+            # 先用阻尼模式刷新反馈，不发位置拉回命令；然后把当前真实位置作为第一帧命令目标。
+            for _ in range(30):
+                control.refresh_motor_status(motor7)
+                control.refresh_motor_status(motor8)
+                control.control_mit(motor7, 0.0, 1.5, 0.0, 0.0, 0.0)
+                control.control_mit(motor8, 0.0, 1.5, 0.0, 0.0, 0.0)
+                time.sleep(0.01)
+            q7_cmd_applied = motor7.Get_Position()
+            q8_cmd_applied = motor8.Get_Position()
+            print(
+                f"[SAFE-START] initial q7={q7_cmd_applied:.6f} q8={q8_cmd_applied:.6f}; "
+                f"will ramp toward targets at {return_speed_rad_s * 180.0 / 3.141592653589793:.1f} deg/s",
+                file=sys.stderr,
+            )
             print("[UDP] listening on 127.0.0.1:15001; IsaacSim FR -> real RR canid7/canid8")
             while running.is_set():
                     #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
@@ -791,37 +819,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     # control.control_mit(control.getMotor(canid3), 0.0, 1.5, 0.0, 0.5, 0)
                     # control.control_mit(control.getMotor(canid4), 0.0, 1.5, 0.0, 0.7, 0)
 
-                    # old: 只读 canid3/canid4 位置，用来记录默认姿态
-                    # control.refresh_motor_status(control.getMotor(canid3))
-                    # control.refresh_motor_status(control.getMotor(canid4))
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 3 度慢速往返
-                    # old: 3deg joint = 6 * 0.05236 = 0.314rad motor
-                    # old: m3_target = 1.141  # 1.455 - 6 * radians(3deg)
-                    # old: m4_target = 1.314  # 1.628 - 6 * radians(3deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 8 度慢速往返
-                    # old: 8deg joint = 6 * 0.13963 = 0.838rad motor
-                    # old: m3_target = 0.617  # 1.455 - 6 * radians(8deg)
-                    # old: m4_target = 0.790  # 1.628 - 6 * radians(8deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 14 度慢速往返
-                    # old: 14deg joint = 6 * 0.24435 = 1.466rad motor
-                    # old: m3_target = -0.011  # 1.455 - 6 * radians(14deg)
-                    # old: m4_target = 0.162  # 1.628 - 6 * radians(14deg)
-
-                    # old: FR_thigh(canid3) + FR_calf(canid4) 同时 20 度慢速往返
-                    # old: 20deg joint = 6 * 0.34907 = 2.094rad motor
-                    # old: m3_target = -0.639  # 1.455 - 6 * radians(20deg)
-                    # old: m4_target = -0.466  # 1.628 - 6 * radians(20deg)
-
                     # 新：接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
                     # q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
-                    m7_default = 0.089  # canid7 的默认位置，实测值，保持不变
-                    m8_default = 1.433
-
-                    motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
-                    motor8 = control.getMotor(canid8)
 
                     while True:
                         try:
@@ -848,8 +847,13 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                         control.disable_all()
                         raise RuntimeError(f"udp timeout: no policy packet for {udp_age:.2f}s")
 
-                    q7_cmd = m7_default + 1.0 * fr_thigh_offset
-                    q8_cmd = m8_default - 1.0 * fr_calf_offset
+                    q7_target = m7_default + 1.0 * fr_thigh_offset
+                    q8_target = m8_default - 1.0 * fr_calf_offset
+                    max_step = return_speed_rad_s * desired_duration
+                    q7_cmd_applied = move_towards_abs(q7_cmd_applied, q7_target, max_step)
+                    q8_cmd_applied = move_towards_abs(q8_cmd_applied, q8_target, max_step)
+                    q7_cmd = q7_cmd_applied
+                    q8_cmd = q8_cmd_applied
 
                     tau7 = motor7.Get_tau()
                     tau8 = motor8.Get_tau()
@@ -887,7 +891,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                             f"thigh_deg:{fr_thigh_offset * 180.0 / 3.141592653589793:+.1f} "
                             f"calf_deg:{fr_calf_offset * 180.0 / 3.141592653589793:+.1f} "
                             f"udp_age:{udp_age:.2f}s "
-                            f"cmd7:{q7_cmd:.3f} cmd8:{q8_cmd:.3f} "
+                            f"target_cmd:({q7_target:.3f},{q8_target:.3f}) "
+                            f"applied_cmd:({q7_cmd:.3f},{q8_cmd:.3f}) "
                             f"m7 pos:{motor7.Get_Position():.3f} vel:{motor7.Get_Velocity():.3f} tau:{motor7.Get_tau():.3f} err:{motor7.Get_err()} | "
                             f"m8 pos:{motor8.Get_Position():.3f} vel:{motor8.Get_Velocity():.3f} tau:{motor8.Get_tau():.3f} err:{motor8.Get_err()} | "
                             # f"m5 pos:{motor5.Get_Position():.3f} vel:{motor5.Get_Velocity():.3f} err:{motor5.Get_err()} | "

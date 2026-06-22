@@ -742,22 +742,22 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             # control.set_zero_position(control.getMotor(canid8))
             # 零位标定时不执行后面的控制循环，直接退出程序。标定完成后再注释掉下面的代码，重新运行程序进入控制循环。
             # 直接取消注释下面的代码是看电机当前角度，需要标定再取消注释上面的
-            time.sleep(0.1)
-            for id in range(1, 9):
-                motor = control.getMotor(id)
-                control.refresh_motor_status(motor)
-                time.sleep(0.02)
-                print(
-                    # f"canid:{id} pos:{motor.Get_Position():.6f} "
-                    f"canid:{id} pos:{motor.Get_Position():.6f} rad "
-                    f"deg:{motor.Get_Position() * 57.2958:.2f} "
-                    f"vel:{motor.Get_Velocity():.3f} "
-                    f"tau:{motor.Get_tau():.3f} "
-                    f"err:{motor.Get_err()}",
-                    file=sys.stderr,
-                )
-            control.disable_all()
-            raise SystemExit
+            # time.sleep(0.1)
+            # for id in range(1, 9):
+            #     motor = control.getMotor(id)
+            #     control.refresh_motor_status(motor)
+            #     time.sleep(0.02)
+            #     print(
+            #         # f"canid:{id} pos:{motor.Get_Position():.6f} "
+            #         f"canid:{id} pos:{motor.Get_Position():.6f} rad "
+            #         f"deg:{motor.Get_Position() * 57.2958:.2f} "
+            #         f"vel:{motor.Get_Velocity():.3f} "
+            #         f"tau:{motor.Get_tau():.3f} "
+            #         f"err:{motor.Get_err()}",
+            #         file=sys.stderr,
+            #     )
+            # control.disable_all()
+            # raise SystemExit
         
 
             while running.is_set():

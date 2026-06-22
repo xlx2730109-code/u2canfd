@@ -676,6 +676,15 @@ def signal_handler(signum, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
+# 回零代码：限速函数，作用：让 current 每次最多移动 max_step，慢慢靠近 target
+def move_towards_abs(current: float, target: float, max_step: float) -> float:
+    diff = target - current
+    if diff > max_step:
+        return current + max_step
+    if diff < -max_step:
+        return current - max_step
+    return target
+
 
 if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
     try:
@@ -763,6 +772,30 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             udp_sock.bind(("127.0.0.1", 15001))
             udp_sock.setblocking(False)
             last_udp_time = time.monotonic()
+
+            # 获取电机对象和零位
+            m7_default = -0.000191  # canid7 的默认位置，实测值，保持不变
+            m8_default = -0.000191
+            motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
+            motor8 = control.getMotor(canid8)
+            # 设置回零速度
+            return_speed_rad_s = 20.0 * 3.141592653589793 / 180.0  # 绝对电机命令限速：20 deg/s，避免启动猛拉回零
+
+            # 先用阻尼模式刷新反馈，不发位置拉回命令；然后把当前真实位置作为第一帧命令目标。
+            for _ in range(30):
+                control.refresh_motor_status(motor7)
+                control.refresh_motor_status(motor8)
+                # kp=0，不拉位置；kd=1.5，只给阻尼
+                control.control_mit(motor7, 0.0, 1.5, 0.0, 0.0, 0.0)
+                control.control_mit(motor8, 0.0, 1.5, 0.0, 0.0, 0.0)
+                time.sleep(0.01)
+            q7_cmd_applied = motor7.Get_Position()
+            q8_cmd_applied = motor8.Get_Position()
+            print(
+                f"[SAFE-START] initial q7={q7_cmd_applied:.6f} q8={q8_cmd_applied:.6f}; "
+                f"will ramp toward targets at {return_speed_rad_s * 180.0 / 3.141592653589793:.1f} deg/s",
+                file=sys.stderr,
+            )
             print("[UDP] listening on 127.0.0.1:15001; IsaacSim FR -> real RR canid7/canid8")
             while running.is_set():
                     #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
@@ -779,11 +812,6 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
 
                     # 新：接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
                     # q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
-                    m7_default = -0.000191  # canid7 的默认位置，实测值，保持不变
-                    m8_default = -0.000191
-
-                    motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
-                    motor8 = control.getMotor(canid8)
 
                     while True:
                         try:
@@ -804,8 +832,13 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                     fr_calf_offset = max(-fr_limit, min(fr_limit, fr_calf_offset))
                     udp_age = time.monotonic() - last_udp_time
 
-                    q7_cmd = m7_default + 1.0 * fr_thigh_offset
-                    q8_cmd = m8_default - 1.0 * fr_calf_offset
+                    q7_target = m7_default + 1.0 * fr_thigh_offset
+                    q8_target = m8_default - 1.0 * fr_calf_offset
+                    max_step = return_speed_rad_s * desired_duration
+                    q7_cmd_applied = move_towards_abs(q7_cmd_applied, q7_target, max_step)
+                    q8_cmd_applied = move_towards_abs(q8_cmd_applied, q8_target, max_step)
+                    q7_cmd = q7_cmd_applied
+                    q8_cmd = q8_cmd_applied
 
                     tau7 = motor7.Get_tau()
                     tau8 = motor8.Get_tau()
@@ -843,7 +876,8 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                             f"thigh_deg:{fr_thigh_offset * 180.0 / 3.141592653589793:+.1f} "
                             f"calf_deg:{fr_calf_offset * 180.0 / 3.141592653589793:+.1f} "
                             f"udp_age:{udp_age:.2f}s "
-                            f"cmd7:{q7_cmd:.3f} cmd8:{q8_cmd:.3f} "
+                            f"target_cmd:({q7_target:.3f},{q8_target:.3f}) "
+                            f"applied_cmd:({q7_cmd:.3f},{q8_cmd:.3f}) "
                             f"m7 pos:{motor7.Get_Position():.3f} vel:{motor7.Get_Velocity():.3f} tau:{motor7.Get_tau():.3f} err:{motor7.Get_err()} | "
                             f"m8 pos:{motor8.Get_Position():.3f} vel:{motor8.Get_Velocity():.3f} tau:{motor8.Get_tau():.3f} err:{motor8.Get_err()} | "
                             # f"m5 pos:{motor5.Get_Position():.3f} vel:{motor5.Get_Velocity():.3f} err:{motor5.Get_err()} | "
