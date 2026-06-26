@@ -652,19 +652,18 @@ class Motor_Control:
 running = threading.Event()
 running.set()
 
-
-def signal_handler(signum, frame):
+def signal_handler(signum, frame):  
     running.clear()
     sys.stderr.write(f"\nInterrupt signal ({signum}) received.\n")
     sys.stderr.flush()
 
 
-signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)    
 
 
 if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
     try:
-        init_data1= []
+        init_data1= []  
         init_data2 = []
         canid1=0x01
         mstid1=0x11

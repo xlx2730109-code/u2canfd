@@ -72,10 +72,10 @@ if _dmcan_user_site is not None and _dmcan_user_site in sys.path:
 
 
 DEFAULT_POLICY = (
-    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz
+    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz
     # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
     # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-23-57\exported\policy.pt"   #100Hz
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
+    r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
 )
 
 
@@ -724,8 +724,13 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
         # parser.add_argument("--policy_rate_hz", type=float, default=150.0, help="Policy inference rate.")
         parser.add_argument("--output_scale", type=float, default=0.10, help="Extra safety scale for policy output.")
         parser.add_argument("--amplitude_deg", type=float, default=20.0, help="Reference trajectory amplitude.")
-        parser.add_argument("--speed_deg_s", type=float, default=35.0, help="Reference max joint speed and command ramp.")
-        parser.add_argument("--warmup_s", type=float, default=2.0, help="Hold zero target before policy starts.")
+        parser.add_argument(
+            "--speed_deg_s",
+            type=float,
+            default=35.0,
+            help="Reference trajectory speed and trained action-term target rate.",
+        )
+        parser.add_argument("--warmup_s", type=float, default=2.0, help="Hold current target before policy starts.")
         parser.add_argument("--duration_s", type=float, default=0.0, help="Run duration. Use 0 for infinite.")
         parser.add_argument("--tau_limit", type=float, default=1.2, help="Safety torque limit in Nm.")
         args = parser.parse_args()
@@ -842,12 +847,20 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
             motor8 = control.getMotor(canid8)
             # 先用阻尼模式刷新反馈，不发位置拉回命令；然后把当前真实偏移作为第一帧 applied_offset。
-            for _ in range(30):
+            feedback_start7 = motor7.last_time_
+            feedback_start8 = motor8.last_time_
+            feedback_deadline = time.monotonic() + 1.0
+            while time.monotonic() < feedback_deadline:
                 control.refresh_motor_status(motor7)
                 control.refresh_motor_status(motor8)
                 control.control_mit(motor7, 0.0, 1.5, 0.0, 0.0, 0.0)
                 control.control_mit(motor8, 0.0, 1.5, 0.0, 0.0, 0.0)
                 time.sleep(0.01)
+                if motor7.last_time_ > feedback_start7 and motor8.last_time_ > feedback_start8:
+                    break
+            if motor7.last_time_ <= feedback_start7 or motor8.last_time_ <= feedback_start8:
+                control.disable_all()
+                raise RuntimeError("no fresh m7/m8 feedback during safe start; refusing to command position targets")
             real_thigh_offset = motor7.Get_Position() - m7_default
             real_calf_offset = -(motor8.Get_Position() - m8_default)
             applied_offset = torch.tensor([real_thigh_offset, real_calf_offset], dtype=torch.float32)
@@ -857,11 +870,12 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             print(f"[POLICY-IN-DAMIAO] loaded: {policy_path}")
             print(
                 f"[POLICY-IN-DAMIAO] rate={args.policy_rate_hz:.1f}Hz output_scale={args.output_scale:.3f} "
-                f"warmup_s={args.warmup_s:.1f} speed_limit={args.speed_deg_s:.1f}deg/s tau_limit={udp_tau_limit:.2f}Nm"
+                f"warmup_s={args.warmup_s:.1f} action_term_speed={args.speed_deg_s:.1f}deg/s "
+                f"tau_limit={udp_tau_limit:.2f}Nm"
             )
             print(
                 f"[SAFE-START] initial_offset_deg=({math.degrees(real_thigh_offset):+.2f},"
-                f"{math.degrees(real_calf_offset):+.2f}); will ramp toward zero during warmup",
+                f"{math.degrees(real_calf_offset):+.2f}); holding current target during warmup",
                 file=sys.stderr,
             )
             while running.is_set():
@@ -895,7 +909,7 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
 
                         if elapsed_s < args.warmup_s:
                             action = torch.zeros(2, dtype=torch.float32)
-                            desired_offset = torch.zeros(2, dtype=torch.float32)
+                            desired_offset = applied_offset.clone()
                         else:
                             policy_elapsed_s = elapsed_s - args.warmup_s
                             phase_sin, phase_cos, thigh_ref, calf_ref = build_reference(
@@ -917,11 +931,12 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
                             with torch.no_grad():
                                 action = policy(obs).squeeze(0).to(torch.float32).clamp(-1.0, 1.0)
                             desired_offset = action * action_scale_rad * float(args.output_scale)
-
-                        desired_offset = torch.clamp(desired_offset, -fr_limit, fr_limit)
-                        max_delta = max_speed_rad_s * policy_dt
-                        delta = torch.clamp(desired_offset - applied_offset, -max_delta, max_delta)
-                        applied_offset += delta
+                            desired_offset = torch.clamp(desired_offset, -fr_limit, fr_limit)
+                            # Match the trained SingleLegPositionAction: raw policy action is rate-limited
+                            # before becoming the joint-position target.
+                            max_delta = max_speed_rad_s * policy_dt
+                            delta = torch.clamp(desired_offset - applied_offset, -max_delta, max_delta)
+                            applied_offset += delta
                         last_action = action.clone()
 
                         next_policy_time += policy_dt

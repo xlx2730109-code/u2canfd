@@ -44,7 +44,7 @@ def main() -> None:
     parser.add_argument("--amplitude_deg", type=float, default=20.0, help="Reference trajectory amplitude.")
     # old: default=35.0，沿用手动键盘测试速度；较大输出幅度时 target 会明显落后 desired。
     # 新：默认放宽到 80deg/s；仍可用 --speed_deg_s 手动覆盖。
-    parser.add_argument("--speed_deg_s", type=float, default=80.0, help="Reference max joint speed.")
+    parser.add_argument("--speed_deg_s", type=float, default=35.0, help="Reference max joint speed.")
     parser.add_argument(
         "--output_scale",
         type=float,
