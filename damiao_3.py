@@ -9,10 +9,9 @@
 # 重新训练后，搜索policy，接着改动
 
 # 终端直接输入
-# D:\Conda\envs\env_isaaclab\python.exe .\damiao_3.py --output_scale 1 --policy_rate_hz 50 
+# D:\Conda\envs\env_isaaclab\python.exe .\damiao_3.py --output_scale 1 --policy_rate_hz 250 --target_rate_limit_deg_s 60
 
-# 当前版本：8 个电机都会注册，但只有 RR_thigh/canid7 和 RR_calf/canid8 会实际发控制命令。
-# Use this only when the Python environment can load both dmcan and torch.
+
 
 from __future__ import annotations
 
@@ -72,15 +71,10 @@ if _dmcan_user_site is not None and _dmcan_user_site in sys.path:
 
 
 DEFAULT_POLICY = (
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_15-43-00\exported\policy.pt"   #50Hz  
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_18-45-06\exported\policy.pt"   #250Hz
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-23-57\exported\policy.pt"   #100Hz
-    # r"D:\IsaacLab\logs\rsl_rl\Bennett_single_leg_rr_trace\2026-06-19_21-49-38\exported\policy.pt"   #150Hz
-
-    # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-27_22-54-27_50hz\exported\policy.pt" # 50Hz 明显卡顿
-    # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-27_23-43-06_150hz\exported\policy.pt" # 150Hz  轻微卡顿
+    r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-27_22-54-27_50hz\exported\policy.pt" # 50Hz 
+    # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-27_23-43-06_150hz\exported\policy.pt" # 150Hz  
     # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-28_11-00-04_200hz\exported\policy.pt" # 200Hz
-    r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-28_11-27-13_250hz\exported\policy.pt" # 250Hz
+    # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-28_11-27-13_250hz\exported\policy.pt" # 250Hz
     # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-28_12-04-46_500hz\exported\policy.pt" # 500Hz
 
 )
@@ -95,6 +89,69 @@ def build_reference(elapsed_s: float, amplitude_rad: float, max_speed_rad_s: flo
     thigh_ref = amplitude_rad * phase_sin
     calf_ref = amplitude_rad * math.sin(phase + math.pi / 2.0)
     return phase_sin, phase_cos, thigh_ref, calf_ref
+
+
+def _parse_yaml_scalar_float(line: str) -> Optional[float]:
+    value = line.split(":", 1)[1].strip()
+    if not value:
+        return None
+    return float(value.split()[0])
+
+
+def load_train_alignment(policy_path: Path) -> dict:
+    """Read the policy run's env.yaml fields that can be mirrored in deployment."""
+    run_dir = policy_path.parent.parent if policy_path.parent.name == "exported" else policy_path.parent
+    env_yaml = run_dir / "params" / "env.yaml"
+    info = {"env_yaml": env_yaml if env_yaml.exists() else None}
+    if not env_yaml.exists():
+        return info
+
+    lines = env_yaml.read_text(encoding="utf-8-sig").splitlines()
+    in_actions = False
+    in_joint_pos_action = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if line.startswith("sim:"):
+            continue
+        if stripped.startswith("dt:") and "sim_dt" not in info:
+            info["sim_dt"] = _parse_yaml_scalar_float(line)
+        elif line.startswith("decimation:"):
+            info["decimation"] = _parse_yaml_scalar_float(line)
+        elif stripped.startswith("stiffness:") and "stiffness" not in info:
+            info["stiffness"] = _parse_yaml_scalar_float(line)
+        elif stripped.startswith("damping:") and "damping" not in info:
+            info["damping"] = _parse_yaml_scalar_float(line)
+        elif stripped.startswith("effort_limit:") and "effort_limit" not in info:
+            info["effort_limit"] = _parse_yaml_scalar_float(line)
+        elif stripped.startswith("saturation_effort:") and "saturation_effort" not in info:
+            info["saturation_effort"] = _parse_yaml_scalar_float(line)
+        elif stripped.startswith("velocity_limit:") and "velocity_limit" not in info:
+            info["velocity_limit"] = _parse_yaml_scalar_float(line)
+
+        if line.startswith("actions:"):
+            in_actions = True
+            in_joint_pos_action = False
+            continue
+        if in_actions and line and not line.startswith(" "):
+            in_actions = False
+            in_joint_pos_action = False
+        if in_actions and line.startswith("  ") and not line.startswith("    ") and stripped.endswith(":"):
+            in_joint_pos_action = stripped == "joint_pos:"
+            continue
+        if in_joint_pos_action:
+            if stripped.startswith("scale:"):
+                info["action_scale_rad"] = _parse_yaml_scalar_float(line)
+            elif stripped.startswith("max_joint_speed:"):
+                info["max_joint_speed_rad_s"] = _parse_yaml_scalar_float(line)
+
+    sim_dt = info.get("sim_dt")
+    decimation = info.get("decimation")
+    if sim_dt and decimation:
+        info["env_step_dt"] = sim_dt * decimation
+        info["policy_rate_hz"] = 1.0 / info["env_step_dt"]
+    return info
 
 
 class DM_Motor_Type(IntEnum):
@@ -727,14 +784,63 @@ if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser(description="Integrated Bennett single-leg policy sim2real on 8-joint motor map; RR active only.")
         parser.add_argument("--policy", type=str, default=DEFAULT_POLICY, help="Exported TorchScript policy.pt path.")
-        parser.add_argument("--policy_rate_hz", type=float, default=50.0, help="Policy inference rate.")
+        parser.add_argument("--policy_rate_hz", type=float, default=None, help="Policy inference rate. Defaults to env.yaml.")
         parser.add_argument("--output_scale", type=float, default=1, help="Extra safety scale for policy output.")
+        parser.add_argument("--action_scale_deg", type=float, default=None, help="Policy action scale. Defaults to env.yaml.")
         parser.add_argument("--amplitude_deg", type=float, default=20.0, help="Reference trajectory amplitude.")
-        parser.add_argument("--speed_deg_s", type=float, default=35.0, help="Reference speed and trained action target rate.")
+        parser.add_argument("--reference_speed_deg_s", type=float, default=35.0, help="Reference trajectory phase speed.")
+        parser.add_argument("--target_rate_limit_deg_s", type=float, default=None, help="Action target rate limit. Defaults to env.yaml.")
+        parser.add_argument("--speed_deg_s", type=float, default=None, help=argparse.SUPPRESS)
+        parser.add_argument("--kp", type=float, default=None, help="MIT position gain. Defaults to env.yaml stiffness.")
+        parser.add_argument("--kd", type=float, default=None, help="MIT velocity gain. Defaults to env.yaml damping.")
         parser.add_argument("--warmup_s", type=float, default=2.0, help="Hold current target before policy starts.")
         parser.add_argument("--duration_s", type=float, default=0.0, help="Run duration. Use 0 for infinite.")
         parser.add_argument("--tau_limit", type=float, default=3.2, help="Safety torque limit in Nm.")
         args = parser.parse_args()
+        if args.speed_deg_s is not None:
+            args.target_rate_limit_deg_s = args.speed_deg_s
+            print(
+                "[Warn] --speed_deg_s is deprecated; using it as --target_rate_limit_deg_s. "
+                "Reference phase speed remains --reference_speed_deg_s.",
+                file=sys.stderr,
+            )
+
+        policy_path = Path(args.policy)
+        if not policy_path.exists():
+            raise FileNotFoundError(policy_path)
+        train_align = load_train_alignment(policy_path)
+        train_rate_hz = train_align.get("policy_rate_hz")
+        if args.policy_rate_hz is None:
+            args.policy_rate_hz = train_rate_hz if train_rate_hz is not None else 50.0
+            policy_rate_source = "env.yaml" if train_rate_hz is not None else "fallback"
+        else:
+            policy_rate_source = "user"
+            if train_rate_hz is not None and abs(args.policy_rate_hz - train_rate_hz) > 1.0e-3:
+                print(
+                    f"[Warn] policy_rate_hz={args.policy_rate_hz:.3f} differs from env.yaml "
+                    f"{train_rate_hz:.3f} Hz",
+                    file=sys.stderr,
+                )
+
+        if args.action_scale_deg is None:
+            action_scale_rad = train_align.get("action_scale_rad", math.radians(20.0))
+            action_scale_source = "env.yaml" if "action_scale_rad" in train_align else "fallback"
+        else:
+            action_scale_rad = math.radians(args.action_scale_deg)
+            action_scale_source = "user"
+
+        if args.target_rate_limit_deg_s is None:
+            target_rate_limit_rad_s = train_align.get("max_joint_speed_rad_s", math.radians(60.0))
+            target_rate_source = "env.yaml" if "max_joint_speed_rad_s" in train_align else "fallback"
+            args.target_rate_limit_deg_s = math.degrees(target_rate_limit_rad_s)
+        else:
+            target_rate_limit_rad_s = math.radians(args.target_rate_limit_deg_s)
+            target_rate_source = "user"
+
+        mit_kp = args.kp if args.kp is not None else train_align.get("stiffness", 40.0)
+        mit_kd = args.kd if args.kd is not None else train_align.get("damping", 1.5)
+        kp_source = "user" if args.kp is not None else ("env.yaml" if "stiffness" in train_align else "fallback")
+        kd_source = "user" if args.kd is not None else ("env.yaml" if "damping" in train_align else "fallback")
 
         MOTOR_SPECS = [
             {"name": "FL_thigh", "channel": 0, "can_id": 0x01, "mst_id": 0x11, "default": 0.0, "sim_to_motor": -1.0},
@@ -764,18 +870,14 @@ if __name__ == "__main__":
         except ImportError as exc:
             raise RuntimeError("damiao_3.py requires torch in the active Python environment.") from exc
 
-        policy_path = Path(args.policy)
-        if not policy_path.exists():
-            raise FileNotFoundError(policy_path)
         policy = torch.jit.load(str(policy_path), map_location="cpu")
         policy.eval()
 
-        action_scale_rad = math.radians(20.0)
         amplitude_rad = math.radians(args.amplitude_deg)
-        max_speed_rad_s = math.radians(args.speed_deg_s)
+        reference_speed_rad_s = math.radians(args.reference_speed_deg_s)
         policy_dt = 1.0 / args.policy_rate_hz
         desired_duration = 1.0 / 1000.0 
-        joint_limit = math.radians(20.0)
+        joint_limit = abs(action_scale_rad)
         next_policy_time = time.monotonic()
         start_time = time.monotonic()
         loop_count = 0
@@ -807,9 +909,33 @@ if __name__ == "__main__":
             desired_offset = applied_offset.clone()
 
             print(f"[POLICY-IN-DAMIAO] loaded: {policy_path}")
+            if train_align.get("env_yaml") is not None:
+                print(f"[TRAIN-ALIGN] env_yaml: {train_align['env_yaml']}")
+            else:
+                print("[TRAIN-ALIGN] env_yaml: not found; using fallback deployment defaults", file=sys.stderr)
+            print(
+                f"[TRAIN-ALIGN] policy_rate={args.policy_rate_hz:.3f}Hz({policy_rate_source}) "
+                f"action_scale={math.degrees(action_scale_rad):.2f}deg({action_scale_source}) "
+                f"target_rate_limit={args.target_rate_limit_deg_s:.2f}deg/s({target_rate_source}) "
+                f"target_step={args.target_rate_limit_deg_s / args.policy_rate_hz:.4f}deg/step"
+            )
+            print(
+                f"[TRAIN-ALIGN] MIT kp={mit_kp:.3f}({kp_source}) kd={mit_kd:.3f}({kd_source}) "
+                f"output_scale={args.output_scale:.3f}"
+            )
+            if any(key in train_align for key in ("effort_limit", "saturation_effort", "velocity_limit")):
+                print(
+                    "[TRAIN-ALIGN] train actuator limits "
+                    f"effort={train_align.get('effort_limit')} "
+                    f"saturation={train_align.get('saturation_effort')} "
+                    f"velocity={train_align.get('velocity_limit')} are not enforced by dmcan MIT; "
+                    "--tau_limit is only a runtime stop threshold.",
+                    file=sys.stderr,
+                )
             print(
                 f"[POLICY-IN-DAMIAO] active=RR_thigh/RR_calf rate={args.policy_rate_hz:.1f}Hz "
-                f"output_scale={args.output_scale:.3f} tau_limit={args.tau_limit:.2f}Nm"
+                f"output_scale={args.output_scale:.3f} ref_speed={args.reference_speed_deg_s:.1f}deg/s "
+                f"target_rate_limit={args.target_rate_limit_deg_s:.1f}deg/s tau_limit={args.tau_limit:.2f}Nm"
             )
             print(
                 f"[SAFE-START] initial_RR_offset_deg=({math.degrees(real_thigh_offset):+.2f},"
@@ -839,7 +965,7 @@ if __name__ == "__main__":
                     else:
                         policy_elapsed_s = elapsed_s - args.warmup_s
                         phase_sin, phase_cos, thigh_ref, calf_ref = build_reference(
-                            policy_elapsed_s, amplitude_rad, max_speed_rad_s
+                            policy_elapsed_s, amplitude_rad, reference_speed_rad_s
                         )
                         ref = torch.tensor([thigh_ref, calf_ref], dtype=torch.float32)
                         tracking_error = real_offset - ref
@@ -856,7 +982,7 @@ if __name__ == "__main__":
                         with torch.no_grad():
                             action = policy(obs).squeeze(0).to(torch.float32).clamp(-1.0, 1.0)
                         desired_offset = torch.clamp(action * action_scale_rad * float(args.output_scale), -joint_limit, joint_limit)
-                        max_delta = max_speed_rad_s * policy_dt
+                        max_delta = target_rate_limit_rad_s * policy_dt
                         applied_offset += torch.clamp(desired_offset - applied_offset, -max_delta, max_delta)
                     last_action = action.clone()
                     next_policy_time += policy_dt
@@ -876,7 +1002,7 @@ if __name__ == "__main__":
                     if loop_count > 100 and abs(motor.Get_tau()) > args.tau_limit:
                         control.disable_all()
                         raise RuntimeError(f"{name} tau too high: {motor.Get_tau():.3f}")
-                    control.control_mit(motor, 40.0, 1.5, q_cmd[name], 0.0, 0.0)
+                    control.control_mit(motor, mit_kp, mit_kd, q_cmd[name], 0.0, 0.0)
 
                 if loop_count % 200 == 0:
                     print(
@@ -899,3 +1025,24 @@ if __name__ == "__main__":
         print("The program exited safely.")
     except Exception as e:
         print(f"Error: hardware interface exception: {e}", file=sys.stderr)
+
+
+# 如果要严格对齐训练 action target，两个都应该用：
+# --target_rate_limit_deg_s 60
+
+# target_rate_limit_deg_s
+# 单步目标跳变 = target_rate_limit_deg_s / policy_rate_hz
+# 50Hz + 20deg/s   = 0.40 deg/step
+# 500Hz + 120deg/s = 0.24 deg/step
+
+# 50Hz 训练:
+# dt=0.003333, decimation=6
+# env.step_dt = 0.02s
+# 训练单步 target = 60 * 0.02 = 1.2deg
+
+# 500Hz 训练:
+# dt=0.0005, decimation=4
+# env.step_dt = 0.002s
+# 训练单步 target = 60 * 0.002 = 0.12deg
+
+# 0.12deg 是 每 0.002 秒最多走 0.12 度，每步最大角度增量 = 60deg/s * 0.002s = 0.12deg
