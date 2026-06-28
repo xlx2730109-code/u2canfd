@@ -683,62 +683,73 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
         mstid8=0x18
         canid9=0x09
         mstid9=0x19
-         #定义电机信息列表：
+        #定义电机信息列表：
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 你的电机型号
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
                     can_id=canid1,
-                    mst_id=mstid1))
+                    mst_id=mstid1,
+                    channel=0))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
                     can_id=canid2,
-                    mst_id=mstid2))
+                    mst_id=mstid2,
+                    channel=0))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
                     can_id=canid3,
-                    mst_id=mstid3))
+                    mst_id=mstid3,
+                    channel=1))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
                     can_id=canid4,
-                    mst_id=mstid4))
+                    mst_id=mstid4,
+                    channel=1))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
                     can_id=canid5,
-                    mst_id=mstid5))
+                    mst_id=mstid5,
+                    channel=0))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
                     can_id=canid6,
-                    mst_id=mstid6))
+                    mst_id=mstid6,
+                    channel=0))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
                     can_id=canid7,
-                    mst_id=mstid7))
+                    mst_id=mstid7,
+                    channel=1))
         init_data1.append(DmActData(
                     motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
                     mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
                     can_id=canid8,
-                    mst_id=mstid8))
+                    mst_id=mstid8,
+                    channel=1))
        
         #USB-CANFD 设备 SN
-        device_sn = "D6977F56F86C64B77B316E7154FA6DF3"
+        # device_sn = "D6977F56F86C64B77B316E7154FA6DF3"
         #CANFD 波特率 1000000 是仲裁段 1M，5000000 是数据段 5M。你、按文档 5M 就保持这样。初始化电机控制结构体
-        with Motor_Control(1000000, 5000000, device_sn, init_data1,device_type=None) as control:
+        # with Motor_Control(1000000, 5000000, device_sn, init_data1,device_type=None) as control:
+            # 驱动类别为双路CANFD  device_type=dmcan_device_type.USB2CANFD_DUAL
+        with Motor_Control(1000000, 5000000, "D6977F56F86C64B77B316E7154FA6DF3", init_data1,
+        device_type=dmcan_device_type.USB2CANFD_DUAL) as control:
             # 把电机“当前所在的位置”写成 0 位。即先手动把电机摆到想要的机械零位，然后执行这一句
             # 执行完后，再读这个电机位置，理论上 Get_Position() 会接近 0.000
-            # control.set_zero_position(control.getMotor(canid1)) # 设置电机零位
-            # control.set_zero_position(control.getMotor(canid2))
-            # control.set_zero_position(control.getMotor(canid3))
-            # control.set_zero_position(control.getMotor(canid4))
-            # control.set_zero_position(control.getMotor(canid5))
-            # control.set_zero_position(control.getMotor(canid6))
-            # control.set_zero_position(control.getMotor(canid7))
-            # control.set_zero_position(control.getMotor(canid8))
+            # control.set_zero_position(control.getMotor(0,canid1)) # 设置电机零位
+            # control.set_zero_position(control.getMotor(0,canid2))
+            # control.set_zero_position(control.getMotor(1,canid3))
+            # control.set_zero_position(control.getMotor(1,canid4))
+            # control.set_zero_position(control.getMotor(0,canid5))
+            # control.set_zero_position(control.getMotor(0,canid6))
+            # control.set_zero_position(control.getMotor(1,canid7))
+            # control.set_zero_position(control.getMotor(1,canid8))
             # 零位标定时不执行后面的控制循环，直接退出程序。标定完成后再注释掉下面的代码，重新运行程序进入控制循环。
             # 直接取消注释下面的代码是看电机当前角度，需要标定再取消注释上面的
             # time.sleep(0.1)
@@ -758,22 +769,19 @@ if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里
             # control.disable_all()
             # raise SystemExit
         
-
+        
             while running.is_set():
                     desired_duration = 1/1000  # 秒
                     current_time = time.perf_counter()
 
-                    # control.control_mit(control.getMotor(0,canid3), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(1,canid4), 0.0, 0.0, 0.0, 0.0, 0.0)
-
-                    control.control_mit(control.getMotor(canid1), 0.0, 1.50, 0.0, 0.5, 0.0)
-                    control.control_mit(control.getMotor(canid2), 0.0, 1.50, 0.0, 0.5, 0.0)
-                    control.control_mit(control.getMotor(canid3), 0.0, 1.50, 0.0, 0.5, 0.0)
-                    control.control_mit(control.getMotor(canid4), 0.0, 1.50, 0.0, 0.5, 0.0)
-                    control.control_mit(control.getMotor(canid5), 0.0, 1.50, 0.0, 0.5, 0.0)  
-                    control.control_mit(control.getMotor(canid6), 0.0, 1.50, 0.0, 0.5, 0.0)
-                    control.control_mit(control.getMotor(canid7), 0.0, 1.50, 0.0, 0.5, 0.0)
-                    control.control_mit(control.getMotor(canid8), 0.0, 1.50, 0.0, 0.5, 0.0)
+                    control.control_mit(control.getMotor(0,canid1), 0.0, 1.50, 0.0, -0.5, 0.0)  #FL_thigh
+                    # control.control_mit(control.getMotor(0,canid2), 0.0, 1.50, 0.0, -0.5, 0.0)  #FL_calf
+                    control.control_mit(control.getMotor(1,canid3), 0.0, 1.50, 0.0, 0.5, 0.0)  #FR_thigh
+                    # control.control_mit(control.getMotor(1,canid4), 0.0, 1.50, 0.0, 0.5, 0.0)  #FR_calf
+                    control.control_mit(control.getMotor(0,canid5), 0.0, 1.50, 0.0, -0.5, 0.0)  #RL_thigh
+                    # control.control_mit(control.getMotor(0,canid6), 0.0, 1.50, 0.0, -0.5, 0.0)  #RL_calf
+                    # control.control_mit(control.getMotor(1,canid7), 0.0, 5.50, 0.0, 0.5, 0.0)  #RR_thigh
+                    control.control_mit(control.getMotor(1,canid8), 0.0, 2.50, 0.0, 0.5, 0.0)  #RR_calf
                     # 打印每个电机的：pos, vel, tau, err, interval  用于看当前位置、速度、力矩和错误码
                     # for id in range(1,10): 
                     #     pos = control.getMotor(id).Get_Position()

@@ -1,4 +1,4 @@
-﻿# 单腿RL policy sim2real
+# 单腿RL policy sim2real
 # 当前 runner 是最小版本，主要用于第一次 policy sim2real。
 # 它没有从 damiao_2.py 反向读取真实电机反馈，而是用内部目标估计构造 observation。
 # 真闭环版本下一步要么把 policy 直接集成进 damiao_2.py，要么让 damiao_2.py 把 m7/m8 反馈再 UDP 发回 runner。
@@ -11,9 +11,8 @@
 # python damiao_2.py
 # python E:\HuanCun\Desktop\u2canfd\single_leg_policy_udp_runner_2.py  --output_scale 1
 
-
-
-
+# 当前版本：8 个电机都会注册，未训练好的 FL/FR/RL 暂不发控制命令。
+# Current active joints: RR_thigh/canid7 and RR_calf/canid8.
 
 from __future__ import annotations
 
@@ -694,252 +693,142 @@ def move_towards_abs(current: float, target: float, max_step: float) -> float:
     return target
 
 
-if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
+if __name__ == "__main__":
     try:
-        init_data1= []
-        init_data2 = []
-        canid1=0x01
-        mstid1=0x11
-        canid2=0x02
-        mstid2=0x12
-        canid3=0x03
-        mstid3=0x13
-        canid4=0x04
-        mstid4=0x14
-        canid5=0x05
-        mstid5=0x15
-        canid6=0x06
-        mstid6=0x16
-        canid7=0x07
-        mstid7=0x17
-        canid8=0x08
-        mstid8=0x18
-        canid9=0x09
-        mstid9=0x19
-        #定义电机信息列表：
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 你的电机型号
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid1,
-                    mst_id=mstid1))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid2,
-                    mst_id=mstid2))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid3,
-                    mst_id=mstid3))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid4,
-                    mst_id=mstid4))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid5,
-                    mst_id=mstid5))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid6,
-                    mst_id=mstid6))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid7,
-                    mst_id=mstid7))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid8,
-                    mst_id=mstid8))
-        #USB-CANFD 设备 SN
+        MOTOR_SPECS = [
+            {"name": "FL_thigh", "channel": 0, "can_id": 0x01, "mst_id": 0x11, "default": 0.0, "sim_to_motor": -1.0},
+            {"name": "FL_calf",  "channel": 0, "can_id": 0x02, "mst_id": 0x12, "default": 0.0, "sim_to_motor": -1.0},
+            {"name": "FR_thigh", "channel": 1, "can_id": 0x03, "mst_id": 0x13, "default": 0.0, "sim_to_motor": +1.0},
+            {"name": "FR_calf",  "channel": 1, "can_id": 0x04, "mst_id": 0x14, "default": 0.0, "sim_to_motor": -1.0},
+            {"name": "RL_thigh", "channel": 0, "can_id": 0x05, "mst_id": 0x15, "default": 0.0, "sim_to_motor": -1.0},
+            {"name": "RL_calf",  "channel": 0, "can_id": 0x06, "mst_id": 0x16, "default": 0.0, "sim_to_motor": -1.0},
+            {"name": "RR_thigh", "channel": 1, "can_id": 0x07, "mst_id": 0x17, "default": 0.0, "sim_to_motor": +1.0},
+            {"name": "RR_calf",  "channel": 1, "can_id": 0x08, "mst_id": 0x18, "default": 0.0, "sim_to_motor": -1.0},
+        ]
+        ACTIVE_JOINTS = ("RR_thigh", "RR_calf")
+        # FL/FR/RL joints are registered but intentionally not commanded until those legs are trained.
+        init_data = [
+            DmActData(
+                motorType=DM_Motor_Type.DM8006,
+                mode=Control_Mode.MIT_MODE,
+                can_id=spec["can_id"],
+                mst_id=spec["mst_id"],
+                channel=spec["channel"],
+            )
+            for spec in MOTOR_SPECS
+        ]
+        spec_by_name = {spec["name"]: spec for spec in MOTOR_SPECS}
+        active_specs = [spec_by_name[name] for name in ACTIVE_JOINTS]
+        target_offsets = {spec["name"]: 0.0 for spec in MOTOR_SPECS}
+
         device_sn = "D6977F56F86C64B77B316E7154FA6DF3"
-        #CANFD 波特率 1000000 是仲裁段 1M，5000000 是数据段 5M。你、按文档 5M 就保持这样。初始化电机控制结构体
-        with Motor_Control(1000000, 5000000, device_sn, init_data1,device_type=None) as control:
-            # control.set_zero_position(control.getMotor(canid1)) # 设置电机零位
-            # control.set_zero_position(control.getMotor(canid2))
-            # control.set_zero_position(control.getMotor(canid3))
-            # control.set_zero_position(control.getMotor(canid4))
-            # control.set_zero_position(control.getMotor(canid5))
-            # control.set_zero_position(control.getMotor(canid6))
-            # control.set_zero_position(control.getMotor(canid7))
-            # control.set_zero_position(control.getMotor(canid8))
-            # control.set_zero_position(control.getMotor(canid9))
-            loop_count = 0  #循环计数器
-            fr_thigh_offset = 0.0   # FR_thigh 偏移量
-            fr_calf_offset = 0.0   # FR_calf 偏移量
-            fr_key_step = 3.141592653589793 / 180.0  # 1deg joint per key press
-            # old: fr_limit = 40.0 * 3.141592653589793 / 180.0 # 真机跟随的关节偏移限幅：±40 deg
-            # 新：单腿 policy 训练动作限幅是 ±20deg，真机端限幅同步收紧到 ±20deg。
-            fr_limit = 20.0 * 3.141592653589793 / 180.0
-            return_speed_rad_s = 55.0 * 3.141592653589793 / 180.0  # 绝对电机命令限速：5 deg/s，避免启动猛拉回零
-            udp_timeout_s = 0.5 # UDP 超时 0.5 秒
-            # old: udp_tau_limit = 2.0 # UDP tau limit 2.0 Nm
-            # 新：先收紧力矩保护，避免策略抖动时硬顶；如果负载正常运动误触发，再小幅提高。
-            udp_tau_limit = 1.2 # UDP tau limit 1.2 Nm
+        with Motor_Control(1000000, 5000000, device_sn, init_data,
+            device_type=dmcan_device_type.USB2CANFD_DUAL) as control:
+            motors = {spec["name"]: control.getMotor(spec["channel"], spec["can_id"]) for spec in MOTOR_SPECS}
+            active_motors = {name: motors[name] for name in ACTIVE_JOINTS}
+
             udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             udp_sock.bind(("127.0.0.1", 15001))
             udp_sock.setblocking(False)
             last_udp_time = time.monotonic()
             got_first_udp = False
-            m7_default = 0.0  # canid7 的默认位置，实测值，保持不变
-            m8_default = 0.0
-            motor7 = control.getMotor(canid7)   # canid7 是 RR_thigh，映射仿真 FR_thigh； canid8 是 RR_calf，映射仿真 FR_calf
-            motor8 = control.getMotor(canid8)
-            # 先用阻尼模式刷新反馈，不发位置拉回命令；然后把当前真实位置作为第一帧命令目标。
+
+            loop_count = 0
+            desired_duration = 1.0 / 1000.0
+            joint_limit = 20.0 * 3.141592653589793 / 180.0
+            return_speed_rad_s = 55.0 * 3.141592653589793 / 180.0
+            tau_limit = 1.2
+            rad_to_deg = 180.0 / 3.141592653589793
+
             for _ in range(30):
-                control.refresh_motor_status(motor7)
-                control.refresh_motor_status(motor8)
-                control.control_mit(motor7, 0.0, 1.5, 0.0, 0.0, 0.0)
-                control.control_mit(motor8, 0.0, 1.5, 0.0, 0.0, 0.0)
+                for motor in active_motors.values():
+                    control.refresh_motor_status(motor)
+                    control.control_mit(motor, 0.0, 1.5, 0.0, 0.0, 0.0)
                 time.sleep(0.01)
-            q7_cmd_applied = motor7.Get_Position()
-            q8_cmd_applied = motor8.Get_Position()
+
+            applied_cmd = {name: active_motors[name].Get_Position() for name in ACTIVE_JOINTS}
             print(
-                f"[SAFE-START] initial q7={q7_cmd_applied:.6f} q8={q8_cmd_applied:.6f}; "
-                f"will ramp toward targets at {return_speed_rad_s * 180.0 / 3.141592653589793:.1f} deg/s",
+                "[SAFE-START] active_joints="
+                + ",".join(ACTIVE_JOINTS)
+                + " initial_q="
+                + ",".join(f"{name}:{applied_cmd[name]:+.6f}" for name in ACTIVE_JOINTS)
+                + f" ramp={return_speed_rad_s * rad_to_deg:.1f}deg/s",
                 file=sys.stderr,
             )
-            print("[UDP] listening on 127.0.0.1:15001; IsaacSim FR -> real RR canid7/canid8")
+            print("[UDP] listening on 127.0.0.1:15001; 8-joint payload accepted; only RR_thigh/RR_calf are commanded")
+
             while running.is_set():
-                    #控制周期 即damiao.py 每秒给电机发 300 次 MIT 命令  现在是 10ms，即 100Hz(1/0.01s=100hz)。
-                    #damiao.py 300Hz > IsaacSim UDP 250Hz   这样 damiao.py 能更及时地拿到最新目标。
-                    desired_duration = 1/1000  # 秒
-                    current_time = time.perf_counter()
-                    loop_count += 1
+                current_time = time.perf_counter()
+                loop_count += 1
 
-                    #kp = 0.0； kd = 1.0； q = 0.0，因为 kp=0，位置目标基本不起作用 ；dq = 1.0，目标速度； tau = 0.0
-                    # control.control_mit(control.getMotor(canid1), 0.0, 1.0, 0.0, 0.5, 0)
-                    # control.control_mit(control.getMotor(canid2), 0.0, 1.0, 0.0, 0.7, 0)
-                    # control.control_mit(control.getMotor(canid3), 0.0, 1.5, 0.0, 0.5, 0)
-                    # control.control_mit(control.getMotor(canid4), 0.0, 1.5, 0.0, 0.7, 0)
+                while True:
+                    try:
+                        packet, _addr = udp_sock.recvfrom(4096)
+                    except BlockingIOError:
+                        break
+                    try:
+                        msg = json.loads(packet.decode("ascii"))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        continue
 
-                    # 新：接收 IsaacSim UDP，仿真 FR 腿目标同步到真实 RR 腿 canid7/canid8
-                    # q_motor = q_motor_default + sign * ratio * q_joint_offset, sign=-1, ratio=6
-
-                    while True:
-                        try:
-                            packet, _addr = udp_sock.recvfrom(4096)
-                        except BlockingIOError:
-                            break
-                        try:
-                            msg = json.loads(packet.decode("ascii"))
-                        except (json.JSONDecodeError, UnicodeDecodeError):
-                            continue
-                        if msg.get("leg") != "FR":
-                            continue
-                        fr_thigh_offset = float(msg.get("thigh_offset_rad", fr_thigh_offset))
-                        fr_calf_offset = float(msg.get("calf_offset_rad", fr_calf_offset))
-                        last_udp_time = time.monotonic()
+                    joint_offsets = msg.get("joint_offsets_rad")
+                    if isinstance(joint_offsets, dict):
+                        for name in target_offsets:
+                            if name in joint_offsets:
+                                target_offsets[name] = float(joint_offsets[name])
                         got_first_udp = True
+                        last_udp_time = time.monotonic()
+                    elif msg.get("leg") in ("FR", "RR"):
+                        target_offsets["RR_thigh"] = float(msg.get("thigh_offset_rad", target_offsets["RR_thigh"]))
+                        target_offsets["RR_calf"] = float(msg.get("calf_offset_rad", target_offsets["RR_calf"]))
+                        got_first_udp = True
+                        last_udp_time = time.monotonic()
 
-                    fr_thigh_offset = max(-fr_limit, min(fr_limit, fr_thigh_offset))
-                    fr_calf_offset = max(-fr_limit, min(fr_limit, fr_calf_offset))
-                    udp_age = time.monotonic() - last_udp_time
-                    # old: 只打印 udp_age；UDP 断流后仍会继续保持旧目标，最后可能靠 tau 保护停机。
-                    # 新：收到过策略数据后，如果 UDP 超时，立即失能退出，问题会更早、更明确。
-                    if got_first_udp and udp_age > udp_timeout_s:
+                for name in target_offsets:
+                    target_offsets[name] = max(-joint_limit, min(joint_limit, target_offsets[name]))
+
+                udp_age = time.monotonic() - last_udp_time
+                if got_first_udp and udp_age > udp_timeout_s:
+                    control.disable_all()
+                    raise RuntimeError(f"udp timeout: no policy packet for {udp_age:.2f}s")
+                max_step = return_speed_rad_s * desired_duration
+                target_cmd = {}
+                for spec in active_specs:
+                    name = spec["name"]
+                    raw_target = spec["default"] + spec["sim_to_motor"] * target_offsets[name]
+                    applied_cmd[name] = move_towards_abs(applied_cmd[name], raw_target, max_step)
+                    target_cmd[name] = raw_target
+
+                for spec in active_specs:
+                    name = spec["name"]
+                    motor = active_motors[name]
+                    if motor.Get_err() not in (0, 1):
                         control.disable_all()
-                        raise RuntimeError(f"udp timeout: no policy packet for {udp_age:.2f}s")
-
-                    q7_target = m7_default + 1.0 * fr_thigh_offset
-                    q8_target = m8_default - 1.0 * fr_calf_offset
-                    max_step = return_speed_rad_s * desired_duration
-                    q7_cmd_applied = move_towards_abs(q7_cmd_applied, q7_target, max_step)
-                    q8_cmd_applied = move_towards_abs(q8_cmd_applied, q8_target, max_step)
-                    q7_cmd = q7_cmd_applied
-                    q8_cmd = q8_cmd_applied
-
-                    tau7 = motor7.Get_tau()
-                    tau8 = motor8.Get_tau()
-                    if motor7.Get_err() not in (0, 1) or motor8.Get_err() not in (0, 1):
+                        raise RuntimeError(f"{name} motor error: {motor.Get_err()}")
+                    if loop_count > 100 and abs(motor.Get_tau()) > tau_limit:
                         control.disable_all()
-                        raise RuntimeError(f"motor error: m7={motor7.Get_err()} m8={motor8.Get_err()}")
-                    if loop_count > 100 and (abs(tau7) > udp_tau_limit or abs(tau8) > udp_tau_limit):
-                        control.disable_all()
-                        raise RuntimeError(f"tau too high: m7={tau7:.3f} m8={tau8:.3f}")
+                        raise RuntimeError(f"{name} tau too high: {motor.Get_tau():.3f}")
+                    control.control_mit(motor, 35.0, 1.5, applied_cmd[name], 0.0, 0.0)
 
-                    # UDP 超时就保持最后目标，不继续变化；收到新包后会自动更新
-                    control.control_mit(motor7, 35.0, 1.5, q7_cmd, 0.0, 0.0)
-                    control.control_mit(motor8, 35.0, 1.5, q8_cmd, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid5), 0.0, 1.0, 0.0, 0.5, 0)
-                    # control.control_mit(control.getMotor(canid6), 0.0, 1.0, 0.0, 0.5, 0)
-                    # control.control_mit(control.getMotor(canid7), 0.0, 1.5, 0.0, 0.7, 0)
-                    # control.control_mit(control.getMotor(canid8), 0.0, 1.0, 0.0, 0.5, 0)
+                if loop_count % 200 == 0:
+                    print(
+                        f"RR_target_deg=({target_offsets['RR_thigh'] * rad_to_deg:+.1f},"
+                        f"{target_offsets['RR_calf'] * rad_to_deg:+.1f}) "
+                        f"udp_age={udp_age:.2f}s "
+                        f"cmd=({applied_cmd['RR_thigh']:+.3f},{applied_cmd['RR_calf']:+.3f}) "
+                        f"m7 pos:{active_motors['RR_thigh'].Get_Position():+.3f} "
+                        f"vel:{active_motors['RR_thigh'].Get_Velocity():+.3f} "
+                        f"tau:{active_motors['RR_thigh'].Get_tau():+.3f} err:{active_motors['RR_thigh'].Get_err()} | "
+                        f"m8 pos:{active_motors['RR_calf'].Get_Position():+.3f} "
+                        f"vel:{active_motors['RR_calf'].Get_Velocity():+.3f} "
+                        f"tau:{active_motors['RR_calf'].Get_tau():+.3f} err:{active_motors['RR_calf'].Get_err()}"
+                    )
 
-                    # old: 状态打印每 50 次打印一次。100Hz 下就是 0.5 秒一次。
-                    # 新：减少 PowerShell 打印阻塞。200Hz 控制下每 200 次打印一次，约 1 秒一次。
-                    if loop_count % 200 == 0:
-                        motor1 = control.getMotor(canid1)
-                        motor2 = control.getMotor(canid2)
-                        motor3 = control.getMotor(canid3)
-                        motor4 = control.getMotor(canid4)
-                        motor5 = control.getMotor(canid5)
-                        motor6 = control.getMotor(canid6)
-                        motor7 = control.getMotor(canid7)
-                        motor8 = control.getMotor(canid8)
+                sleep_till = current_time + desired_duration
+                now = time.perf_counter()
+                if sleep_till > now:
+                    time.sleep(sleep_till - now)
 
-
-                        print(
-                            # f"m1 pos:{motor1.Get_Position():.3f} vel:{motor1.Get_Velocity():.3f} err:{motor1.Get_err()} | "
-                            # f"m2 pos:{motor2.Get_Position():.3f} vel:{motor2.Get_Velocity():.3f} err:{motor2.Get_err()} | "
-                            f"thigh_deg:{fr_thigh_offset * 180.0 / 3.141592653589793:+.1f} "
-                            f"calf_deg:{fr_calf_offset * 180.0 / 3.141592653589793:+.1f} "
-                            f"udp_age:{udp_age:.2f}s "
-                            f"target_cmd:({q7_target:.3f},{q8_target:.3f}) "
-                            f"applied_cmd:({q7_cmd:.3f},{q8_cmd:.3f}) "
-                            f"m7 pos:{motor7.Get_Position():.3f} vel:{motor7.Get_Velocity():.3f} tau:{motor7.Get_tau():.3f} err:{motor7.Get_err()} | "
-                            f"m8 pos:{motor8.Get_Position():.3f} vel:{motor8.Get_Velocity():.3f} tau:{motor8.Get_tau():.3f} err:{motor8.Get_err()} | "
-                            # f"m5 pos:{motor5.Get_Position():.3f} vel:{motor5.Get_Velocity():.3f} err:{motor5.Get_err()} | "
-                            # f"m6 pos:{motor6.Get_Position():.3f} vel:{motor6.Get_Velocity():.3f} err:{motor6.Get_err()} | "
-                            # f"m7 pos:{motor7.Get_Position():.3f} vel:{motor7.Get_Velocity():.3f} err:{motor7.Get_err()} | "
-                            # f"m8 pos:{motor8.Get_Position():.3f} vel:{motor8.Get_Velocity():.3f} err:{motor8.Get_err()} | "
-                            # print(
-                            # f"canid:{canid1} "
-                            # f"pos:{motor1.Get_Position():.3f} "
-                            # f"vel:{motor1.Get_Velocity():.3f} "
-                            # f"tau:{motor1.Get_tau():.3f} "
-                            # f"err:{motor1.Get_err()} "
-                            # f"dt:{motor1.getTimeInterval():.4f}",
-                            # flush=True,
-                        )
-                    # control.control_mit(control.getMotor(canid2), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid3), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid4), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid5), 0.0, 0.0, 0.0, 0.0, 0.0)  
-                    # control.control_mit(control.getMotor(canid6), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid7), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid8), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # control.control_mit(control.getMotor(canid9), 0.0, 0.0, 0.0, 0.0, 0.0)
-                    # for id in range(1,10): 
-                    #     pos = control.getMotor(id).Get_Position()
-                    #     vel = control.getMotor(id).Get_Velocity()
-                    #     tau = control.getMotor(id).Get_tau()
-                    #     err = control.getMotor(id).Get_err()
-                    #     interval = control.getMotor(id).getTimeInterval()
-                    #     print(f"canid is: {id} pos: {pos:.3f} vel: {vel:.3f} effort: {tau:.3f} err: {err} time(s): {interval:.4f}", file=sys.stderr)
-                    # print(
-                    #     f"canid is: {1} pos: {control.getMotor(canid1).Get_Position():.6f} "
-                    #     f"canid is: {2} pos: {control.getMotor(canid2).Get_Position():.6f} "
-                    #     f"canid is: {3} pos: {control.getMotor(canid3).Get_Position():.6f} "
-                    #     f"canid is: {4} pos: {control.getMotor(canid4).Get_Position():.6f} "
-                    #     f"canid is: {5} pos: {control.getMotor(canid5).Get_Position():.6f} "
-                    #     f"canid is: {6} pos: {control.getMotor(canid6).Get_Position():.6f} "
-                    #     f"canid is: {7} pos: {control.getMotor(canid7).Get_Position():.6f} "
-                    #     f"canid is: {8} pos: {control.getMotor(canid8).Get_Position():.6f} "
-                    #     f"canid is: {9} pos: {control.getMotor(canid9).Get_Position():.6f}",
-                    #     file=sys.stderr
-                    # )     
-                    sleep_till = current_time + desired_duration
-                    now = time.perf_counter()
-                    if sleep_till > now:
-                        time.sleep(sleep_till - now)
-
-        print("The program exited safely.") 
+        print("The program exited safely.")
     except Exception as e:
         print(f"Error: hardware interface exception: {e}", file=sys.stderr)
