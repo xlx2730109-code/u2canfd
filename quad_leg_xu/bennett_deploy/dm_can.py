@@ -1,12 +1,19 @@
-# 原始文件
-# 已跑通八电机同步控制
-
+﻿# Extracted from the verified go2-10 hardware backend; behavior intentionally preserved.
 
 from __future__ import annotations
 
-import os
-import sys
 import ctypes
+import hashlib
+import importlib
+import os
+import struct
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from enum import IntEnum
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
 
 # 针对 Ubuntu22.04 环境的 libusb 兼容性补丁
 if sys.platform == "linux" and "CONDA_PREFIX" in os.environ:
@@ -17,20 +24,34 @@ if sys.platform == "linux" and "CONDA_PREFIX" in os.environ:
         except Exception as e:
             print(f"Warning: Failed to preload conda libusb: {e}")
 
-import signal
-import struct
-import sys
-import threading
-import time
-from dataclasses import dataclass
-from enum import IntEnum
-from typing import Dict, Iterable, List, Optional, Tuple
-
 if sys.platform == "win32":
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    dll_dir = os.path.join(base_dir, "dlls")
-    os.add_dll_directory(base_dir)
-    os.add_dll_directory(dll_dir)
+    root_dir = Path(__file__).resolve().parents[2]
+    _dm_sdk_profiles = {
+        "original": ("dlls", "DB7FC43D0D60B847479DCB58CFBE13E524B0CA43C5DFA847D14E760BC0E2A8A7"),
+        "low_latency": (
+            "dlls_lowlatency",
+            "252FAEFDC70F1C52D61F93E74E29B07F871F00230E75985D03CAE7C43B4AF15E",
+        ),
+    }
+    _dm_sdk_profile = os.environ.get("BENNETT_DM_SDK_PROFILE", "original").strip().lower()
+    if _dm_sdk_profile not in _dm_sdk_profiles:
+        raise ValueError(
+            f"invalid BENNETT_DM_SDK_PROFILE={_dm_sdk_profile!r}; "
+            f"expected one of {tuple(_dm_sdk_profiles)}"
+        )
+    _dll_directory_name, _expected_dm_sha256 = _dm_sdk_profiles[_dm_sdk_profile]
+    dll_dir = root_dir / _dll_directory_name
+    if not dll_dir.is_dir():
+        raise FileNotFoundError(f"dmcan DLL directory not found: {dll_dir}")
+    _dm_dll_path = dll_dir / "libdm_device.dll"
+    _actual_dm_sha256 = hashlib.sha256(_dm_dll_path.read_bytes()).hexdigest().upper()
+    if _actual_dm_sha256 != _expected_dm_sha256:
+        raise RuntimeError(
+            f"dmcan DLL hash mismatch for profile {_dm_sdk_profile!r}: "
+            f"expected={_expected_dm_sha256} actual={_actual_dm_sha256} path={_dm_dll_path}"
+        )
+    os.add_dll_directory(str(root_dir))
+    os.add_dll_directory(str(dll_dir))
     _dm_dll_handles = []
     for dll_name in (
         "libwinpthread-1.dll",
@@ -39,9 +60,38 @@ if sys.platform == "win32":
         "libusb-1.0.dll",
         "libdm_device.dll",
     ):
-        _dm_dll_handles.append(ctypes.CDLL(os.path.join(dll_dir, dll_name)))
+        _dm_dll_handles.append(ctypes.CDLL(str(dll_dir / dll_name)))
+    print(
+        f"[DM-SDK] loaded profile={_dm_sdk_profile} path={dll_dir} "
+        f"libdm_sha256={_actual_dm_sha256}",
+        file=sys.stderr,
+    )
+
+_dmcan_user_site = None
+if sys.platform == "win32":
+    # env_isaaclab 有 torch 但通常没有 dmcan/pyusb；本机 Python313 user-site 已有这两个纯 Python 包。
+    # 只在导入 dmcan 时临时加入，导入后马上移除，避免 Python313 的 numpy 污染 Python311 的 torch。
+    _candidate_user_site = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "Python", "Python313", "site-packages")
+    if os.path.isdir(os.path.join(_candidate_user_site, "dmcan")) and _candidate_user_site not in sys.path:
+        sys.path.insert(0, _candidate_user_site)
+        _dmcan_user_site = _candidate_user_site
 
 from dmcan import DmCanContext, dmcan_channel_can_info, dmcan_device_type, usb_rx_frame
+
+if _dmcan_user_site is not None and _dmcan_user_site in sys.path:
+    sys.path.remove(_dmcan_user_site)
+
+if sys.platform == "win32":
+    # dmcan-sdk's loader searches cwd/dlls before the Windows DLL search path.
+    # Without this binding it silently creates the device context from the
+    # original DLL even when the selected low-latency DLL was preloaded above.
+    _dmcan_context_module = importlib.import_module("dmcan.dmcan_context")
+
+    def _selected_dm_backend_path() -> str:
+        return str(_dm_dll_path)
+
+    _dmcan_context_module.find_backend_dll_path = _selected_dm_backend_path
+    DmCanContext.__init__.__globals__["find_backend_dll_path"] = _selected_dm_backend_path
 
 
 class DM_Motor_Type(IntEnum):
@@ -320,6 +370,19 @@ class Motor_Control:
             )
 
         self.context = DmCanContext()
+        if sys.platform == "win32":
+            actual_context_path = Path(self.context.dll_path).resolve()
+            expected_context_path = _dm_dll_path.resolve()
+            if actual_context_path != expected_context_path:
+                self.context.destroy()
+                raise RuntimeError(
+                    f"dmcan device context loaded wrong DLL: expected={expected_context_path} "
+                    f"actual={actual_context_path}"
+                )
+            print(
+                f"[DM-SDK] context profile={_dm_sdk_profile} path={actual_context_path}",
+                file=sys.stderr,
+            )
         dev_count = self.context.find_devices(device_type)
         if dev_count <= 0:
             self.context.destroy()
@@ -645,169 +708,92 @@ class Motor_Control:
             for ch in self._registered_channels() or {0}:
                 self.device.enable_channel(ch, False)
         finally:
-            self.device.close()
-            self.context.destroy()
+            if sys.platform == "win32":
+                print("[Warn] skip SDK close on Windows to avoid dmcan shutdown hang", file=sys.stderr)
+                return
+            try:
+                self.device.close()
+            finally:
+                try:
+                    self.context.destroy()
+                except OSError as exc:
+                    print(f"[Warn] context destroy failed during close: {exc}", file=sys.stderr)
 
 
-running = threading.Event()
-running.set()
-
-def signal_handler(signum, frame):  
-    running.clear()
-    sys.stderr.write(f"\nInterrupt signal ({signum}) received.\n")
-    sys.stderr.flush()
-
-
-signal.signal(signal.SIGINT, signal_handler)    
+@dataclass(frozen=True)
+class MotorSnapshot:
+    position: float
+    velocity: float
+    torque: float
+    error: int
+    feedback_age_s: float
 
 
-if __name__ == "__main__":  #在main函数里定义id变量，并且在try块里进行电机控制的初始化和循环控制
-    try:
-        init_data1= []  
-        init_data2 = []
-        canid1=0x01
-        mstid1=0x11
-        canid2=0x02
-        mstid2=0x12
-        canid3=0x03
-        mstid3=0x13
-        canid4=0x04
-        mstid4=0x14
-        canid5=0x05
-        mstid5=0x15
-        canid6=0x06
-        mstid6=0x16
-        canid7=0x07
-        mstid7=0x17
-        canid8=0x08
-        mstid8=0x18
-        canid9=0x09
-        mstid9=0x19
-        #定义电机信息列表：
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 你的电机型号
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid1,
-                    mst_id=mstid1,
-                    channel=0))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid2,
-                    mst_id=mstid2,
-                    channel=0))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid3,
-                    mst_id=mstid3,
-                    channel=1))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid4,
-                    mst_id=mstid4,
-                    channel=1))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid5,
-                    mst_id=mstid5,
-                    channel=0))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid6,
-                    mst_id=mstid6,
-                    channel=0))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid7,
-                    mst_id=mstid7,
-                    channel=1))
-        init_data1.append(DmActData(
-                    motorType=DM_Motor_Type.DM8006,  # 或者具体类型，如 DM_Motor_Type.DM8006
-                    mode=Control_Mode.MIT_MODE,        # 如 Control_Mode.MIT_MODE
-                    can_id=canid8,
-                    mst_id=mstid8,
-                    channel=1))
-       
-        #USB-CANFD 设备 SN
-        # device_sn = "D6977F56F86C64B77B316E7154FA6DF3"
-        #CANFD 波特率 1000000 是仲裁段 1M，5000000 是数据段 5M。你、按文档 5M 就保持这样。初始化电机控制结构体
-        # with Motor_Control(1000000, 5000000, device_sn, init_data1,device_type=None) as control:
-            # 驱动类别为双路CANFD  device_type=dmcan_device_type.USB2CANFD_DUAL
-        with Motor_Control(1000000, 5000000, "D6977F56F86C64B77B316E7154FA6DF3", init_data1,
-        device_type=dmcan_device_type.USB2CANFD_DUAL) as control:
-            # 把电机“当前所在的位置”写成 0 位。即先手动把电机摆到想要的机械零位，然后执行这一句
-            # 执行完后，再读这个电机位置，理论上 Get_Position() 会接近 0.000
-            # control.set_zero_position(control.getMotor(0,canid1)) # 设置电机零位
-            # control.set_zero_position(control.getMotor(0,canid2))
-            # control.set_zero_position(control.getMotor(1,canid3))
-            # control.set_zero_position(control.getMotor(1,canid4))
-            # control.set_zero_position(control.getMotor(0,canid5))
-            # control.set_zero_position(control.getMotor(0,canid6))
-            # control.set_zero_position(control.getMotor(1,canid7))
-            # control.set_zero_position(control.getMotor(1,canid8))
-            # 零位标定时不执行后面的控制循环，直接退出程序。标定完成后再注释掉下面的代码，重新运行程序进入控制循环。
-            # 直接取消注释下面的代码是看电机当前角度，需要标定再取消注释上面的
-            # time.sleep(0.1)
-            # for id in range(1, 9):
-            #     motor = control.getMotor(id)
-            #     control.refresh_motor_status(motor)
-            #     time.sleep(0.02)
-            #     print(
-            #         # f"canid:{id} pos:{motor.Get_Position():.6f} "
-            #         f"canid:{id} pos:{motor.Get_Position():.6f} rad "
-            #         f"deg:{motor.Get_Position() * 57.2958:.2f} "
-            #         f"vel:{motor.Get_Velocity():.3f} "
-            #         f"tau:{motor.Get_tau():.3f} "
-            #         f"err:{motor.Get_err()}",
-            #         file=sys.stderr,
-            #     )
-            # control.disable_all()
-            # raise SystemExit
-        
-        
-            while running.is_set():
-                    desired_duration = 1/1000  # 秒
-                    current_time = time.perf_counter()
+class Go2MotorBus:
+    """Atomic snapshots and ordered MIT commands for the fixed go2-10 wiring."""
 
-                    control.control_mit(control.getMotor(0,canid1), 0.0, 1.50, 0.0, -0.5, 0.0)  #FL_thigh
-                    # control.control_mit(control.getMotor(0,canid2), 0.0, 1.50, 0.0, -0.5, 0.0)  #FL_calf
-                    # control.control_mit(control.getMotor(1,canid3), 0.0, 1.50, 0.0, 0.5, 0.0)  #FR_thigh
-                    # control.control_mit(control.getMotor(1,canid4), 0.0, 1.50, 0.0, 0.5, 0.0)  #FR_calf
-                    # control.control_mit(control.getMotor(0,canid5), 0.0, 1.50, 0.0, -0.5, 0.0)  #RL_thigh
-                    # control.control_mit(control.getMotor(0,canid6), 0.0, 1.50, 0.0, -0.5, 0.0)  #RL_calf
-                    # control.control_mit(control.getMotor(1,canid7), 0.0, 5.50, 0.0, 0.5, 0.0)  #RR_thigh
-                    # control.control_mit(control.getMotor(1,canid8), 0.0, 2.50, 0.0, 0.5, 0.0)  #RR_calf
-                    # 打印每个电机的：pos, vel, tau, err, interval  用于看当前位置、速度、力矩和错误码
-                    # for id in range(1,10): 
-                    #     pos = control.getMotor(id).Get_Position()
-                    #     vel = control.getMotor(id).Get_Velocity()
-                    #     tau = control.getMotor(id).Get_tau()
-                    #     err = control.getMotor(id).Get_err()
-                    #     interval = control.getMotor(id).getTimeInterval()
-                    #     print(f"canid is: {id} pos: {pos:.3f} vel: {vel:.3f} effort: {tau:.3f} err: {err} time(s): {interval:.4f}", file=sys.stderr)
-                    # print(
-                    #     f"canid is: {1} pos: {control.getMotor(canid1).Get_Position():.6f} "
-                    #     f"canid is: {2} pos: {control.getMotor(canid2).Get_Position():.6f} "
-                    #     f"canid is: {3} pos: {control.getMotor(canid3).Get_Position():.6f} "
-                    #     f"canid is: {4} pos: {control.getMotor(canid4).Get_Position():.6f} "
-                    #     f"canid is: {5} pos: {control.getMotor(canid5).Get_Position():.6f} "
-                    #     f"canid is: {6} pos: {control.getMotor(canid6).Get_Position():.6f} "
-                    #     f"canid is: {7} pos: {control.getMotor(canid7).Get_Position():.6f} "
-                    #     f"canid is: {8} pos: {control.getMotor(canid8).Get_Position():.6f} "
-                    #     file=sys.stderr
-                    # )     
-                    #
-                    sleep_till = current_time + desired_duration
-                    now = time.perf_counter()
-                    if sleep_till > now:
-                        time.sleep(sleep_till - now)
+    DEVICE_SERIAL = "D6977F56F86C64B77B316E7154FA6DF3"
 
-        print("The program exited safely.") 
-    except Exception as e:
-        print(f"Error: hardware interface exception: {e}", file=sys.stderr)
+    def __init__(self, joint_specs):
+        self.joint_specs = tuple(joint_specs)
+        init_data = [
+            DmActData(
+                DM_Motor_Type.DM8006,
+                Control_Mode.MIT_MODE,
+                spec.can_id,
+                spec.master_id,
+                spec.channel,
+            )
+            for spec in self.joint_specs
+        ]
+        self.control = Motor_Control(
+            1_000_000,
+            5_000_000,
+            self.DEVICE_SERIAL,
+            init_data,
+            device_type=dmcan_device_type.USB2CANFD_DUAL,
+        )
+        self.motors = {
+            spec.name: self.control.getMotor(spec.channel, spec.can_id) for spec in self.joint_specs
+        }
+        if any(motor is None for motor in self.motors.values()):
+            self.close()
+            raise RuntimeError("registered motor lookup failed")
 
+    def wait_fresh_feedback(self, timeout_s: float = 1.0) -> None:
+        initial = {name: motor.last_time_ for name, motor in self.motors.items()}
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            for motor in self.motors.values():
+                self.control.refresh_motor_status(motor)
+                self.control.control_mit(motor, 0.0, 1.5, 0.0, 0.0, 0.0)
+            time.sleep(0.01)
+            if all(self.motors[name].last_time_ > initial[name] for name in self.motors):
+                return
+        missing = [name for name, motor in self.motors.items() if motor.last_time_ <= initial[name]]
+        self.control.disable_all()
+        raise RuntimeError(f"no fresh motor feedback during safe start: {missing}")
+
+    def snapshot(self, now: Optional[float] = None) -> Dict[str, MotorSnapshot]:
+        timestamp = time.monotonic() if now is None else float(now)
+        with self.control._lock:
+            return {
+                name: MotorSnapshot(
+                    position=float(motor.Get_Position()),
+                    velocity=float(motor.Get_Velocity()),
+                    torque=float(motor.Get_tau()),
+                    error=int(motor.Get_err()),
+                    feedback_age_s=max(0.0, timestamp - float(motor.last_time_)),
+                )
+                for name, motor in self.motors.items()
+            }
+
+    def command(self, targets: Dict[str, float], active_names, *, kp: float, kd: float) -> None:
+        for name in active_names:
+            self.control.control_mit(self.motors[name], kp, kd, float(targets[name]), 0.0, 0.0)
+
+    def disable(self) -> None:
+        self.control.disable_all()
+
+    def close(self) -> None:
+        self.control.close()

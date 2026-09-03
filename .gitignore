@@ -1,0 +1,10 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Runtime and diagnostic logs
+logs/
+
+# Local assistant workspace
+.claude/
+

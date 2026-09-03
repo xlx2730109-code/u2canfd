@@ -1,14 +1,12 @@
 # 单腿 sim2real 映射验证
 
-# 先运行 python damiao_1.py 来控制电机，确保电机连接正确并且驱动安装好。这个脚本会初始化电机控制器，并在循环中发送控制命令。
-# 再运行 python source\isaaclab_tasks\isaaclab_tasks\manager_based\locomotion\velocity\config\bennett_test4\bennett_single_leg_ik_trace.py 来发送 UDP 数据包控制电机。
+# 先运行 python 1_single_leg_rr_jct.py 来控制电机，确保电机连接正确并且驱动安装好。这个脚本会初始化电机控制器，并在循环中发送控制命令。
+# 再运行 python source\bennett_rl\bennett_rl\tasks\manager_based\single_leg_rr_jct\bennett_single_leg_ik_trace.py 来发送 UDP 数据包控制电机。
 # 打开的isaacsim场景是 bennett_single_leg_ik_trace.usd，里面有一个单腿 Bennett 机器人，
 # UDP 数据包里包含了 FR_thigh 和 FR_calf 的目标位置偏移，isaac sim 里会根据这个偏移计算出 FR_thigh 和 FR_calf 的目标位置，
 # 并通过 UDP 发给 damiao_1.py 来控制真机的 FR_thigh 和 FR_calf 跟随。你可以在 isaac sim 里按键来调整 FR_thigh 和 FR_calf 的偏移，
 # 观察真机的跟随效果。
 
-# 当前版本：8 个电机都会注册，但只有 RR_thigh/canid7 和 RR_calf/canid8 会实际发控制命令。
-# Start this script first, then send targets from Isaac/manual UDP or single_leg_policy_udp_runner_2.py.
 
 from __future__ import annotations
 

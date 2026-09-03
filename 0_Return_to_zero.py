@@ -1,17 +1,13 @@
-# 单腿RL policy sim2real
-# 把 policy 集成进 damiao_3.py
-# 优点：单进程，理论延迟低。
-# 缺点：达妙 DLL + Torch + conda 环境混在一起，很容易出现 DLL、Python 版本、USB 库冲突。现在不建议。
-# 改两处：
-# damiao_3.py：每隔比如 50Hz 或 100Hz 把 m7/m8 真实反馈 UDP 发到 127.0.0.1:15002。
-# single_leg_policy_udp_runner.py：绑定 15002 接收反馈，用真实反馈构造 observation。
-
-# 重新训练后，搜索policy，接着改动
-
-# 终端直接输入
-# D:\Conda\envs\env_isaaclab\python.exe .\damiao_3.py --output_scale 1 --policy_rate_hz 250 --target_rate_limit_deg_s 60
-
-
+# Bennett 8 电机安全回零脚本
+#
+# 运行示例：
+# D:\Conda\envs\env_isaaclab\python.exe 0_Return_to_zero.py --speed_deg_s 5 --kp 15 --kd 1.5 --tau_limit 2.0
+#
+# 安全逻辑：
+# 1. 先用 kp=0 的阻尼命令刷新反馈，不在第一帧把电机硬拉到 0。
+# 2. 用每个电机当前反馈位置作为 applied_cmd 起点。
+# 3. 按 --speed_deg_s 限速逐步 ramp 到电机内部零位 q=0。
+# 4. 任一电机反馈丢失、错误码异常或力矩超限都会 disable_all 后退出。
 
 from __future__ import annotations
 
@@ -37,7 +33,6 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import IntEnum
-from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 if sys.platform == "win32":
@@ -68,90 +63,6 @@ from dmcan import DmCanContext, dmcan_channel_can_info, dmcan_device_type, usb_r
 
 if _dmcan_user_site is not None and _dmcan_user_site in sys.path:
     sys.path.remove(_dmcan_user_site)
-
-
-DEFAULT_POLICY = (
-    r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-27_22-54-27_50hz\exported\policy.pt" # 50Hz 
-    # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-27_23-43-06_150hz\exported\policy.pt" # 150Hz  
-    # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-28_11-00-04_200hz\exported\policy.pt" # 200Hz
-    # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-28_11-27-13_250hz\exported\policy.pt" # 250Hz
-    # r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\single_leg_rr_trace\2026-06-28_12-04-46_500hz\exported\policy.pt" # 500Hz
-
-)
-
-
-def build_reference(elapsed_s: float, amplitude_rad: float, max_speed_rad_s: float) -> tuple[float, float, float, float]:
-    """Return phase sin/cos and thigh/calf reference offsets."""
-    frequency_hz = max_speed_rad_s / max(2.0 * math.pi * amplitude_rad, 1.0e-6)
-    phase = 2.0 * math.pi * frequency_hz * elapsed_s
-    phase_sin = math.sin(phase)
-    phase_cos = math.cos(phase)
-    thigh_ref = amplitude_rad * phase_sin
-    calf_ref = amplitude_rad * math.sin(phase + math.pi / 2.0)
-    return phase_sin, phase_cos, thigh_ref, calf_ref
-
-
-def _parse_yaml_scalar_float(line: str) -> Optional[float]:
-    value = line.split(":", 1)[1].strip()
-    if not value:
-        return None
-    return float(value.split()[0])
-
-
-def load_train_alignment(policy_path: Path) -> dict:
-    """Read the policy run's env.yaml fields that can be mirrored in deployment."""
-    run_dir = policy_path.parent.parent if policy_path.parent.name == "exported" else policy_path.parent
-    env_yaml = run_dir / "params" / "env.yaml"
-    info = {"env_yaml": env_yaml if env_yaml.exists() else None}
-    if not env_yaml.exists():
-        return info
-
-    lines = env_yaml.read_text(encoding="utf-8-sig").splitlines()
-    in_actions = False
-    in_joint_pos_action = False
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if line.startswith("sim:"):
-            continue
-        if stripped.startswith("dt:") and "sim_dt" not in info:
-            info["sim_dt"] = _parse_yaml_scalar_float(line)
-        elif line.startswith("decimation:"):
-            info["decimation"] = _parse_yaml_scalar_float(line)
-        elif stripped.startswith("stiffness:") and "stiffness" not in info:
-            info["stiffness"] = _parse_yaml_scalar_float(line)
-        elif stripped.startswith("damping:") and "damping" not in info:
-            info["damping"] = _parse_yaml_scalar_float(line)
-        elif stripped.startswith("effort_limit:") and "effort_limit" not in info:
-            info["effort_limit"] = _parse_yaml_scalar_float(line)
-        elif stripped.startswith("saturation_effort:") and "saturation_effort" not in info:
-            info["saturation_effort"] = _parse_yaml_scalar_float(line)
-        elif stripped.startswith("velocity_limit:") and "velocity_limit" not in info:
-            info["velocity_limit"] = _parse_yaml_scalar_float(line)
-
-        if line.startswith("actions:"):
-            in_actions = True
-            in_joint_pos_action = False
-            continue
-        if in_actions and line and not line.startswith(" "):
-            in_actions = False
-            in_joint_pos_action = False
-        if in_actions and line.startswith("  ") and not line.startswith("    ") and stripped.endswith(":"):
-            in_joint_pos_action = stripped == "joint_pos:"
-            continue
-        if in_joint_pos_action:
-            if stripped.startswith("scale:"):
-                info["action_scale_rad"] = _parse_yaml_scalar_float(line)
-            elif stripped.startswith("max_joint_speed:"):
-                info["max_joint_speed_rad_s"] = _parse_yaml_scalar_float(line)
-
-    sim_dt = info.get("sim_dt")
-    decimation = info.get("decimation")
-    if sim_dt and decimation:
-        info["env_step_dt"] = sim_dt * decimation
-        info["policy_rate_hz"] = 1.0 / info["env_step_dt"]
-    return info
 
 
 class DM_Motor_Type(IntEnum):
@@ -780,80 +691,56 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
+def move_towards_abs(current: float, target: float, max_step: float) -> float:
+    delta = target - current
+    if abs(delta) <= max_step:
+        return target
+    return current + math.copysign(max_step, delta)
+
+
 if __name__ == "__main__":
     try:
-        parser = argparse.ArgumentParser(description="Integrated Bennett single-leg policy sim2real on 8-joint motor map; RR active only.")
-        parser.add_argument("--policy", type=str, default=DEFAULT_POLICY, help="Exported TorchScript policy.pt path.")
-        parser.add_argument("--policy_rate_hz", type=float, default=None, help="Policy inference rate. Defaults to env.yaml.")
-        parser.add_argument("--output_scale", type=float, default=1, help="Extra safety scale for policy output.")
-        parser.add_argument("--action_scale_deg", type=float, default=None, help="Policy action scale. Defaults to env.yaml.")
-        parser.add_argument("--amplitude_deg", type=float, default=20.0, help="Reference trajectory amplitude.")
-        parser.add_argument("--reference_speed_deg_s", type=float, default=35.0, help="Reference trajectory phase speed.")
-        parser.add_argument("--target_rate_limit_deg_s", type=float, default=None, help="Action target rate limit. Defaults to env.yaml.")
-        parser.add_argument("--speed_deg_s", type=float, default=None, help=argparse.SUPPRESS)
-        parser.add_argument("--kp", type=float, default=None, help="MIT position gain. Defaults to env.yaml stiffness.")
-        parser.add_argument("--kd", type=float, default=None, help="MIT velocity gain. Defaults to env.yaml damping.")
-        parser.add_argument("--warmup_s", type=float, default=2.0, help="Hold current target before policy starts.")
-        parser.add_argument("--duration_s", type=float, default=0.0, help="Run duration. Use 0 for infinite.")
-        parser.add_argument("--tau_limit", type=float, default=3.2, help="Safety torque limit in Nm.")
+        parser = argparse.ArgumentParser(description="Safely return all 8 Bennett motors to motor zero.")
+        parser.add_argument("--speed_deg_s", type=float, default=10.0, help="Return-to-zero command ramp speed.")
+        parser.add_argument("--kp", type=float, default=95.0, help="MIT position gain during return-to-zero.")
+        parser.add_argument("--kd", type=float, default=1.5, help="MIT velocity damping during return-to-zero.")
+        parser.add_argument("--tau_limit", type=float, default=12.0, help="Stop if any active motor torque exceeds this Nm value.")
+        parser.add_argument("--tolerance_deg", type=float, default=0.5, help="Finish after all active motors are within this target error.")
+        parser.add_argument("--hold_s", type=float, default=0.5, help="Hold zero target for this long after reaching tolerance.")
+        parser.add_argument("--safe_start_s", type=float, default=1.0, help="Max time to wait for fresh motor feedback.")
+        parser.add_argument("--feedback_timeout_s", type=float, default=0.25, help="Stop if active motor feedback is stale.")
+        parser.add_argument("--loop_hz", type=float, default=1000.0, help="MIT command loop rate.")
+        parser.add_argument("--device_sn", type=str, default="D6977F56F86C64B77B316E7154FA6DF3", help="USB2CANFD serial number.")
+        parser.add_argument(
+            "--active_joints",
+            choices=("all", "rr"),
+            default="all",
+            help="Return all 8 motors or only RR_thigh/RR_calf for staged testing.",
+        )
         args = parser.parse_args()
-        if args.speed_deg_s is not None:
-            args.target_rate_limit_deg_s = args.speed_deg_s
-            print(
-                "[Warn] --speed_deg_s is deprecated; using it as --target_rate_limit_deg_s. "
-                "Reference phase speed remains --reference_speed_deg_s.",
-                file=sys.stderr,
-            )
 
-        policy_path = Path(args.policy)
-        if not policy_path.exists():
-            raise FileNotFoundError(policy_path)
-        train_align = load_train_alignment(policy_path)
-        train_rate_hz = train_align.get("policy_rate_hz")
-        if args.policy_rate_hz is None:
-            args.policy_rate_hz = train_rate_hz if train_rate_hz is not None else 50.0
-            policy_rate_source = "env.yaml" if train_rate_hz is not None else "fallback"
-        else:
-            policy_rate_source = "user"
-            if train_rate_hz is not None and abs(args.policy_rate_hz - train_rate_hz) > 1.0e-3:
-                print(
-                    f"[Warn] policy_rate_hz={args.policy_rate_hz:.3f} differs from env.yaml "
-                    f"{train_rate_hz:.3f} Hz",
-                    file=sys.stderr,
-                )
+        if args.speed_deg_s <= 0.0:
+            raise ValueError("--speed_deg_s must be positive")
+        if args.loop_hz <= 0.0:
+            raise ValueError("--loop_hz must be positive")
 
-        if args.action_scale_deg is None:
-            action_scale_rad = train_align.get("action_scale_rad", math.radians(20.0))
-            action_scale_source = "env.yaml" if "action_scale_rad" in train_align else "fallback"
-        else:
-            action_scale_rad = math.radians(args.action_scale_deg)
-            action_scale_source = "user"
-
-        if args.target_rate_limit_deg_s is None:
-            target_rate_limit_rad_s = train_align.get("max_joint_speed_rad_s", math.radians(60.0))
-            target_rate_source = "env.yaml" if "max_joint_speed_rad_s" in train_align else "fallback"
-            args.target_rate_limit_deg_s = math.degrees(target_rate_limit_rad_s)
-        else:
-            target_rate_limit_rad_s = math.radians(args.target_rate_limit_deg_s)
-            target_rate_source = "user"
-
-        mit_kp = args.kp if args.kp is not None else train_align.get("stiffness", 40.0)
-        mit_kd = args.kd if args.kd is not None else train_align.get("damping", 1.5)
-        kp_source = "user" if args.kp is not None else ("env.yaml" if "stiffness" in train_align else "fallback")
-        kd_source = "user" if args.kd is not None else ("env.yaml" if "damping" in train_align else "fallback")
-
-        MOTOR_SPECS = [
-            {"name": "FL_thigh", "channel": 0, "can_id": 0x01, "mst_id": 0x11, "default": 0.0, "sim_to_motor": -1.0},
-            {"name": "FL_calf",  "channel": 0, "can_id": 0x02, "mst_id": 0x12, "default": 0.0, "sim_to_motor": -1.0},
-            {"name": "FR_thigh", "channel": 1, "can_id": 0x03, "mst_id": 0x13, "default": 0.0, "sim_to_motor": +1.0},
-            {"name": "FR_calf",  "channel": 1, "can_id": 0x04, "mst_id": 0x14, "default": 0.0, "sim_to_motor": -1.0},
-            {"name": "RL_thigh", "channel": 0, "can_id": 0x05, "mst_id": 0x15, "default": 0.0, "sim_to_motor": -1.0},
-            {"name": "RL_calf",  "channel": 0, "can_id": 0x06, "mst_id": 0x16, "default": 0.0, "sim_to_motor": -1.0},
-            {"name": "RR_thigh", "channel": 1, "can_id": 0x07, "mst_id": 0x17, "default": 0.0, "sim_to_motor": +1.0},
-            {"name": "RR_calf",  "channel": 1, "can_id": 0x08, "mst_id": 0x18, "default": 0.0, "sim_to_motor": -1.0},
+        joint_names = [
+            "FL_thigh", "FL_calf", "FR_thigh", "FR_calf",
+            "RL_thigh", "RL_calf", "RR_thigh", "RR_calf",
         ]
-        ACTIVE_JOINTS = ("RR_thigh", "RR_calf")
-        # FL/FR/RL joints are registered but intentionally not commanded until those legs are trained.
+        all_motor_specs = [
+            {"name": "FL_thigh", "channel": 0, "can_id": 0x01, "mst_id": 0x11, "zero": 0.0},
+            {"name": "FL_calf",  "channel": 0, "can_id": 0x02, "mst_id": 0x12, "zero": 0.0},
+            {"name": "FR_thigh", "channel": 1, "can_id": 0x03, "mst_id": 0x13, "zero": 0.0},
+            {"name": "FR_calf",  "channel": 1, "can_id": 0x04, "mst_id": 0x14, "zero": 0.0},
+            {"name": "RL_thigh", "channel": 0, "can_id": 0x05, "mst_id": 0x15, "zero": 0.0},
+            {"name": "RL_calf",  "channel": 0, "can_id": 0x06, "mst_id": 0x16, "zero": 0.0},
+            {"name": "RR_thigh", "channel": 1, "can_id": 0x07, "mst_id": 0x17, "zero": 0.0},
+            {"name": "RR_calf",  "channel": 1, "can_id": 0x08, "mst_id": 0x18, "zero": 0.0},
+        ]
+        active_joint_names = tuple(joint_names if args.active_joints == "all" else ("RR_thigh", "RR_calf"))
+        spec_by_name = {spec["name"]: spec for spec in all_motor_specs}
+        active_specs = [spec_by_name[name] for name in active_joint_names]
         init_data = [
             DmActData(
                 motorType=DM_Motor_Type.DM8006,
@@ -862,187 +749,124 @@ if __name__ == "__main__":
                 mst_id=spec["mst_id"],
                 channel=spec["channel"],
             )
-            for spec in MOTOR_SPECS
+            for spec in active_specs
         ]
-        spec_by_name = {spec["name"]: spec for spec in MOTOR_SPECS}
-        try:
-            import torch
-        except ImportError as exc:
-            raise RuntimeError("damiao_3.py requires torch in the active Python environment.") from exc
 
-        policy = torch.jit.load(str(policy_path), map_location="cpu")
-        policy.eval()
+        loop_dt = 1.0 / args.loop_hz
+        max_step = math.radians(args.speed_deg_s) * loop_dt
+        tolerance = math.radians(args.tolerance_deg)
+        rad_to_deg = 180.0 / math.pi
 
-        amplitude_rad = math.radians(args.amplitude_deg)
-        reference_speed_rad_s = math.radians(args.reference_speed_deg_s)
-        policy_dt = 1.0 / args.policy_rate_hz
-        desired_duration = 1.0 / 1000.0 
-        joint_limit = abs(action_scale_rad)
-        next_policy_time = time.monotonic()
-        start_time = time.monotonic()
-        loop_count = 0
-        last_action = torch.zeros(2, dtype=torch.float32)
-        action = torch.zeros(2, dtype=torch.float32)
-        desired_offset = torch.zeros(2, dtype=torch.float32)
+        with Motor_Control(
+            1000000,
+            5000000,
+            args.device_sn,
+            init_data,
+            device_type=dmcan_device_type.USB2CANFD_DUAL,
+        ) as control:
+            motors = {spec["name"]: control.getMotor(spec["channel"], spec["can_id"]) for spec in active_specs}
+            active_motors = {name: motors[name] for name in active_joint_names}
 
-        with Motor_Control(1000000, 5000000, "D6977F56F86C64B77B316E7154FA6DF3", init_data,
-            device_type=dmcan_device_type.USB2CANFD_DUAL) as control:
-            motors = {spec["name"]: control.getMotor(spec["channel"], spec["can_id"]) for spec in MOTOR_SPECS}
-            active_motors = {name: motors[name] for name in ACTIVE_JOINTS}
-
-            feedback_start = {name: active_motors[name].last_time_ for name in ACTIVE_JOINTS}
-            feedback_deadline = time.monotonic() + 1.0
+            feedback_start = {name: active_motors[name].last_time_ for name in active_joint_names}
+            feedback_deadline = time.monotonic() + args.safe_start_s
             while time.monotonic() < feedback_deadline:
-                for motor in active_motors.values():
+                for name in active_joint_names:
+                    motor = active_motors[name]
                     control.refresh_motor_status(motor)
-                    control.control_mit(motor, 0.0, 1.5, 0.0, 0.0, 0.0)
+                    control.control_mit(motor, 0.0, args.kd, 0.0, 0.0, 0.0)
                 time.sleep(0.01)
-                if all(active_motors[name].last_time_ > feedback_start[name] for name in ACTIVE_JOINTS):
+                if all(active_motors[name].last_time_ > feedback_start[name] for name in active_joint_names):
                     break
-            if not all(active_motors[name].last_time_ > feedback_start[name] for name in ACTIVE_JOINTS):
+            if not all(active_motors[name].last_time_ > feedback_start[name] for name in active_joint_names):
+                missing = [name for name in active_joint_names if active_motors[name].last_time_ <= feedback_start[name]]
                 control.disable_all()
-                raise RuntimeError("no fresh RR_thigh/RR_calf feedback during safe start")
+                raise RuntimeError(f"no fresh motor feedback during safe start: {missing}")
 
-            real_thigh_offset = active_motors["RR_thigh"].Get_Position() - spec_by_name["RR_thigh"]["default"]
-            real_calf_offset = -(active_motors["RR_calf"].Get_Position() - spec_by_name["RR_calf"]["default"])
-            applied_offset = torch.tensor([real_thigh_offset, real_calf_offset], dtype=torch.float32)
-            desired_offset = applied_offset.clone()
+            applied_cmd = {name: active_motors[name].Get_Position() for name in active_joint_names}
+            zero_cmd = {name: spec_by_name[name]["zero"] for name in active_joint_names}
+            reached_since = None
+            loop_count = 0
 
-            print(f"[POLICY-IN-DAMIAO] loaded: {policy_path}")
-            if train_align.get("env_yaml") is not None:
-                print(f"[TRAIN-ALIGN] env_yaml: {train_align['env_yaml']}")
-            else:
-                print("[TRAIN-ALIGN] env_yaml: not found; using fallback deployment defaults", file=sys.stderr)
             print(
-                f"[TRAIN-ALIGN] policy_rate={args.policy_rate_hz:.3f}Hz({policy_rate_source}) "
-                f"action_scale={math.degrees(action_scale_rad):.2f}deg({action_scale_source}) "
-                f"target_rate_limit={args.target_rate_limit_deg_s:.2f}deg/s({target_rate_source}) "
-                f"target_step={args.target_rate_limit_deg_s / args.policy_rate_hz:.4f}deg/step"
+                "[ZERO-START] active_joints="
+                + ",".join(active_joint_names)
+                + f" speed={args.speed_deg_s:.1f}deg/s kp={args.kp:.2f} kd={args.kd:.2f} "
+                + f"tau_limit={args.tau_limit:.2f}Nm"
             )
             print(
-                f"[TRAIN-ALIGN] MIT kp={mit_kp:.3f}({kp_source}) kd={mit_kd:.3f}({kd_source}) "
-                f"output_scale={args.output_scale:.3f}"
-            )
-            if any(key in train_align for key in ("effort_limit", "saturation_effort", "velocity_limit")):
-                print(
-                    "[TRAIN-ALIGN] train actuator limits "
-                    f"effort={train_align.get('effort_limit')} "
-                    f"saturation={train_align.get('saturation_effort')} "
-                    f"velocity={train_align.get('velocity_limit')} are not enforced by dmcan MIT; "
-                    "--tau_limit is only a runtime stop threshold.",
-                    file=sys.stderr,
-                )
-            print(
-                f"[POLICY-IN-DAMIAO] active=RR_thigh/RR_calf rate={args.policy_rate_hz:.1f}Hz "
-                f"output_scale={args.output_scale:.3f} ref_speed={args.reference_speed_deg_s:.1f}deg/s "
-                f"target_rate_limit={args.target_rate_limit_deg_s:.1f}deg/s tau_limit={args.tau_limit:.2f}Nm"
-            )
-            print(
-                f"[SAFE-START] initial_RR_offset_deg=({math.degrees(real_thigh_offset):+.2f},"
-                f"{math.degrees(real_calf_offset):+.2f})",
-                file=sys.stderr,
+                "[ZERO-START] initial_deg="
+                + ", ".join(f"{name}:{active_motors[name].Get_Position() * rad_to_deg:+.2f}" for name in active_joint_names)
             )
 
             while running.is_set():
                 current_time = time.perf_counter()
-                now = time.monotonic()
-                elapsed_s = now - start_time
-                if args.duration_s > 0.0 and elapsed_s >= args.duration_s:
-                    break
                 loop_count += 1
 
-                real_thigh_offset = active_motors["RR_thigh"].Get_Position() - spec_by_name["RR_thigh"]["default"]
-                real_calf_offset = -(active_motors["RR_calf"].Get_Position() - spec_by_name["RR_calf"]["default"])
-                real_thigh_vel = active_motors["RR_thigh"].Get_Velocity()
-                real_calf_vel = -active_motors["RR_calf"].Get_Velocity()
+                all_close = True
+                max_real_error = 0.0
+                max_tau = 0.0
 
-                if now >= next_policy_time:
-                    real_offset = torch.tensor([real_thigh_offset, real_calf_offset], dtype=torch.float32)
-                    real_vel = torch.tensor([real_thigh_vel, real_calf_vel], dtype=torch.float32)
-                    if elapsed_s < args.warmup_s:
-                        action = torch.zeros(2, dtype=torch.float32)
-                        desired_offset = applied_offset.clone()
-                    else:
-                        policy_elapsed_s = elapsed_s - args.warmup_s
-                        phase_sin, phase_cos, thigh_ref, calf_ref = build_reference(
-                            policy_elapsed_s, amplitude_rad, reference_speed_rad_s
-                        )
-                        ref = torch.tensor([thigh_ref, calf_ref], dtype=torch.float32)
-                        tracking_error = real_offset - ref
-                        obs = torch.cat(
-                            (
-                                torch.tensor([phase_sin, phase_cos], dtype=torch.float32),
-                                ref,
-                                tracking_error,
-                                real_offset,
-                                real_vel,
-                                last_action,
-                            )
-                        ).unsqueeze(0)
-                        with torch.no_grad():
-                            action = policy(obs).squeeze(0).to(torch.float32).clamp(-1.0, 1.0)
-                        desired_offset = torch.clamp(action * action_scale_rad * float(args.output_scale), -joint_limit, joint_limit)
-                        max_delta = target_rate_limit_rad_s * policy_dt
-                        applied_offset += torch.clamp(desired_offset - applied_offset, -max_delta, max_delta)
-                    last_action = action.clone()
-                    next_policy_time += policy_dt
-                    if next_policy_time < now - policy_dt:
-                        next_policy_time = now + policy_dt
-
-                q_cmd = {
-                    "RR_thigh": spec_by_name["RR_thigh"]["default"] + applied_offset[0].item(),
-                    "RR_calf": spec_by_name["RR_calf"]["default"] - applied_offset[1].item(),
-                }
-
-                for name in ACTIVE_JOINTS:
+                for name in active_joint_names:
                     motor = active_motors[name]
+                    if loop_count > 100 and time.monotonic() - motor.last_time_ > args.feedback_timeout_s:
+                        control.disable_all()
+                        raise RuntimeError(f"{name} feedback timeout: {time.monotonic() - motor.last_time_:.3f}s")
                     if motor.Get_err() not in (0, 1):
                         control.disable_all()
                         raise RuntimeError(f"{name} motor error: {motor.Get_err()}")
+                    max_tau = max(max_tau, abs(motor.Get_tau()))
                     if loop_count > 100 and abs(motor.Get_tau()) > args.tau_limit:
                         control.disable_all()
                         raise RuntimeError(f"{name} tau too high: {motor.Get_tau():.3f}")
-                    control.control_mit(motor, mit_kp, mit_kd, q_cmd[name], 0.0, 0.0)
 
-                if loop_count % 200 == 0:
+                    applied_cmd[name] = move_towards_abs(applied_cmd[name], zero_cmd[name], max_step)
+                    control.control_mit(motor, args.kp, args.kd, applied_cmd[name], 0.0, 0.0)
+
+                    real_error = abs(motor.Get_Position() - zero_cmd[name])
+                    max_real_error = max(max_real_error, real_error)
+                    if real_error > tolerance or abs(applied_cmd[name] - zero_cmd[name]) > tolerance:
+                        all_close = False
+
+                now = time.monotonic()
+                if all_close:
+                    if reached_since is None:
+                        reached_since = now
+                    elif now - reached_since >= args.hold_s:
+                        break
+                else:
+                    reached_since = None
+
+                if loop_count % max(1, int(args.loop_hz / 5.0)) == 0:
+                    rr_names = [name for name in ("RR_thigh", "RR_calf") if name in active_motors]
+                    rr_status = " ".join(
+                        f"{name}_cmd={applied_cmd[name] * rad_to_deg:+.2f}deg "
+                        f"real={active_motors[name].Get_Position() * rad_to_deg:+.2f}deg"
+                        for name in rr_names
+                    )
                     print(
-                        f"target_deg=({math.degrees(float(applied_offset[0].item())):+.1f},"
-                        f"{math.degrees(float(applied_offset[1].item())):+.1f}) "
-                        f"desired_deg=({math.degrees(float(desired_offset[0].item())):+.1f},"
-                        f"{math.degrees(float(desired_offset[1].item())):+.1f}) "
-                        f"real_deg=({math.degrees(real_thigh_offset):+.1f},{math.degrees(real_calf_offset):+.1f}) "
-                        f"action=({action[0].item():+.2f},{action[1].item():+.2f}) "
-                        f"cmd7:{q_cmd['RR_thigh']:+.3f} cmd8:{q_cmd['RR_calf']:+.3f} "
-                        f"m7 tau:{active_motors['RR_thigh'].Get_tau():+.3f} "
-                        f"m8 tau:{active_motors['RR_calf'].Get_tau():+.3f}"
+                        f"max_err={max_real_error * rad_to_deg:.2f}deg "
+                        f"tau_max={max_tau:.3f} {rr_status}"
                     )
 
-                sleep_till = current_time + desired_duration
+                sleep_till = current_time + loop_dt
                 sleep_now = time.perf_counter()
                 if sleep_till > sleep_now:
                     time.sleep(sleep_till - sleep_now)
+
+            if running.is_set():
+                for _ in range(max(1, int(args.loop_hz * 0.1))):
+                    for name in active_joint_names:
+                        control.control_mit(active_motors[name], args.kp, args.kd, zero_cmd[name], 0.0, 0.0)
+                    time.sleep(loop_dt)
+                print(
+                    "[ZERO-DONE] final_deg="
+                    + ", ".join(f"{name}:{active_motors[name].Get_Position() * rad_to_deg:+.2f}" for name in active_joint_names)
+                )
+            else:
+                print("[ZERO-INTERRUPTED] disable motors without direct zero hold", file=sys.stderr)
+            control.disable_all()
 
         print("The program exited safely.")
     except Exception as e:
         print(f"Error: hardware interface exception: {e}", file=sys.stderr)
 
-
-# 如果要严格对齐训练 action target，两个都应该用：
-# --target_rate_limit_deg_s 60
-
-# target_rate_limit_deg_s
-# 单步目标跳变 = target_rate_limit_deg_s / policy_rate_hz
-# 50Hz + 20deg/s   = 0.40 deg/step
-# 500Hz + 120deg/s = 0.24 deg/step
-
-# 50Hz 训练:
-# dt=0.003333, decimation=6
-# env.step_dt = 0.02s
-# 训练单步 target = 60 * 0.02 = 1.2deg
-
-# 500Hz 训练:
-# dt=0.0005, decimation=4
-# env.step_dt = 0.002s
-# 训练单步 target = 60 * 0.002 = 0.12deg
-
-# 0.12deg 是 每 0.002 秒最多走 0.12 度，每步最大角度增量 = 60deg/s * 0.002s = 0.12deg
