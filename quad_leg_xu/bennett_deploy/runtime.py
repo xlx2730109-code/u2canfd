@@ -183,7 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default_timeout_s", type=float, default=6.0)
     parser.add_argument("--warmup_s", type=float, default=2.0)
     parser.add_argument("--duration_s", type=float, default=0.0)
-    parser.add_argument("--tau_limit", type=float, default=16.0)
+    parser.add_argument("--tau_limit", type=float, default=18.0)
     parser.add_argument("--motor_feedback_timeout_s", type=float, default=0.50)
     parser.add_argument("--imu_timeout_s", type=float, default=0.10)
     parser.add_argument("--imu_cutoff_hz", type=float, default=12.0)
