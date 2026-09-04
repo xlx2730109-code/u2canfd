@@ -4,6 +4,7 @@
 # 动作: 8个关节位置残差
 
 # D:\Conda\envs\env_isaaclab\python.exe -B 5_quad_leg_standing_2.py --default_mode motor_zero --active_joints rr --output_scale 1 --target_rate_limit_deg_s 10 --default_rate_limit_deg_s 3 --default_reached_threshold_deg 1.0 --default_reached_hold_s 0.5 --default_timeout_s 15 --warmup_s 1 --tau_limit 8
+# python 5_quad_leg_standing_2.py --default_mode motor_zero --active_joints rr --output_scale 1 --target_rate_limit_deg_s 10 --default_rate_limit_deg_s 3 --default_reached_threshold_deg 1.0 --default_reached_hold_s 0.5 --default_timeout_s 15 --warmup_s 1 --tau_limit 8
 from __future__ import annotations
 
 import os

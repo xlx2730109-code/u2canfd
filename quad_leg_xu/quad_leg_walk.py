@@ -8,6 +8,7 @@
 # D:\Conda\envs\env_isaaclab\python.exe -B quad_leg_xu\quad_leg_walk.py --keyboard --duration_s 10
 # Strict train-equivalent powered test after safe-start. Do not pass --target_rate_limit_deg_s unless you intentionally want a non-training-equivalent limiter:
 # D:\Conda\envs\env_isaaclab\python.exe -B quad_leg_xu\quad_leg_walk.py --keyboard --default_mode motor_zero --active_joints rr --default_rate_limit_deg_s 3 --default_reached_threshold_deg 1.0 --default_reached_hold_s 0.5 --default_timeout_s 15 --warmup_s 1 --tau_limit 6
+
 from __future__ import annotations
 
 import os

@@ -6,7 +6,7 @@ No hardware is opened by ``--check_only``.
 """
 
 # D:\Conda\envs\env_isaaclab\python.exe -B quad_leg_xu\quad_leg_go2-11.py --keyboard
-
+# python quad_leg_xu\quad_leg_go2-11.py --keyboard
 from __future__ import annotations
 
 import math

@@ -9,7 +9,7 @@ runtime.  ``--check_only`` never opens hardware.
 # Run from E:\HuanCun\Desktop\u2canfd:
 # D:\Conda\envs\env_isaaclab\python.exe -B .\quad_leg_xu\quad_leg_trot\quad_leg_trot2.py --check_only
 # D:\Conda\envs\env_isaaclab\python.exe -B .\quad_leg_xu\quad_leg_trot\quad_leg_trot2.py --keyboard --log_csv ".\quad_leg_xu\quad_leg_trot\logs\trot2-first.csv"
-
+# python .\quad_leg_xu\quad_leg_trot\quad_leg_trot2.py --keyboard --log_csv ".\quad_leg_xu\quad_leg_trot\logs\trot2-first.csv"
 from __future__ import annotations
 
 import math

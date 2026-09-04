@@ -10,7 +10,7 @@ motors.
 # old: Trot1 previously lived directly under quad_leg_xu.
 # D:\Conda\envs\env_isaaclab\python.exe -B .\quad_leg_xu\quad_leg_trot\quad_leg_trot1.py --check_only
 # D:\Conda\envs\env_isaaclab\python.exe -B .\quad_leg_xu\quad_leg_trot\quad_leg_trot1.py --keyboard
-
+# python .\quad_leg_xu\quad_leg_trot\quad_leg_trot1.py --keyboard
 from __future__ import annotations
 
 import hashlib

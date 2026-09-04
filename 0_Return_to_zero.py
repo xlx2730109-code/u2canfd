@@ -2,7 +2,7 @@
 #
 # 运行示例：
 # D:\Conda\envs\env_isaaclab\python.exe 0_Return_to_zero.py --speed_deg_s 5 --kp 15 --kd 1.5 --tau_limit 2.0
-#
+# python 0_Return_to_zero.py --speed_deg_s 5 --kp 15 --kd 1.5 --tau_limit 2.0
 # 安全逻辑：
 # 1. 先用 kp=0 的阻尼命令刷新反馈，不在第一帧把电机硬拉到 0。
 # 2. 用每个电机当前反馈位置作为 applied_cmd 起点。

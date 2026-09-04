@@ -9,7 +9,7 @@ the IMU, USB-CAN adapter, or motors.
 # Run from E:\HuanCun\Desktop\u2canfd:
 # D:\Conda\envs\env_isaaclab\python.exe -B .\quad_leg_xu\quad_leg_go2-13.py --check_only
 # D:\Conda\envs\env_isaaclab\python.exe -B .\quad_leg_xu\quad_leg_go2-13.py --keyboard --log_csv ".\go2-13-first.csv"
-
+# python .\quad_leg_xu\quad_leg_go2-13.py --keyboard --log_csv ".\go2-13-first.csv"
 from __future__ import annotations
 
 import math

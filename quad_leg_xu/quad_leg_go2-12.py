@@ -7,7 +7,7 @@ No hardware is opened by ``--check_only``.
 """
 
 # D:\Conda\envs\env_isaaclab\python.exe -B quad_leg_xu\quad_leg_go2-12.py --keyboard --log_csv "E:\HuanCun\Desktop\u2canfd\go2-12-first.csv"
-
+# python quad_leg_xu\quad_leg_go2-12.py --keyboard --log_csv "E:\HuanCun\Desktop\u2canfd\go2-12-first.csv"
 from __future__ import annotations
 
 import math

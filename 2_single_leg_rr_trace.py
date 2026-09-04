@@ -10,7 +10,7 @@
 
 # 终端直接输入
 # D:\Conda\envs\env_isaaclab\python.exe 2_single_leg_rr_trace.py --output_scale 1 --policy_rate_hz 50 --target_rate_limit_deg_s 20
-
+# python 2_single_leg_rr_trace.py --output_scale 1 --policy_rate_hz 50 --target_rate_limit_deg_s 20
 
 
 from __future__ import annotations
