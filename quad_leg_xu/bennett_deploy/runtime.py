@@ -125,6 +125,12 @@ def _fmt(values: Sequence[float], digits: int = 3) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Bennett go2-10 config-driven native hardware deployment")
     parser.add_argument("--policy", default=DEFAULT_POLICY, help="Exact policy.pt or experiment directory")
+    parser.add_argument(
+        "--policy-kind",
+        choices=("go2", "trot1", "free"),
+        default="go2",
+        help="Deployment adapter: go2-10 contract (default), trot1 speed-conditioned gait, or free-gait (33-dim, no gait terms)",
+    )
     parser.add_argument("--check_only", action="store_true", help="Validate contract and TorchScript without IMU or motors")
     parser.add_argument("--dry_run", action="store_true", help="Read IMU and run policy without opening motors")
     parser.add_argument(
@@ -291,15 +297,33 @@ class ImuObservationSource:
 
 
 class DeploymentRunner:
-    def __init__(self, args: argparse.Namespace, contract: DeploymentContract, stop_event: threading.Event):
+    def __init__(self, args: argparse.Namespace, contract: DeploymentContract, stop_event: threading.Event, policy_kind: str = "go2"):
         self.args = args
         self.contract = contract
         self.stop_event = stop_event
-        self.pipeline = PolicyPipeline(
-            contract,
-            output_scale=args.output_scale,
-            target_rate_limit_deg_s=args.target_rate_limit_deg_s,
-        )
+        self.policy_kind = policy_kind
+        if policy_kind == "trot1":
+            from .trot1_policy import TrotPolicyPipeline
+
+            self.pipeline = TrotPolicyPipeline(
+                contract,
+                output_scale=args.output_scale,
+                target_rate_limit_deg_s=args.target_rate_limit_deg_s,
+            )
+        elif policy_kind == "free":
+            from .free_gait_policy import FreeGaitPolicyPipeline
+
+            self.pipeline = FreeGaitPolicyPipeline(
+                contract,
+                output_scale=args.output_scale,
+                target_rate_limit_deg_s=args.target_rate_limit_deg_s,
+            )
+        else:
+            self.pipeline = PolicyPipeline(
+                contract,
+                output_scale=args.output_scale,
+                target_rate_limit_deg_s=args.target_rate_limit_deg_s,
+            )
         self.kp = contract.stiffness if args.kp is None else float(args.kp)
         self.kd = contract.damping if args.kd is None else float(args.kd)
         if not math.isfinite(self.kp) or not 0.0 <= self.kp <= 500.0:
@@ -345,8 +369,14 @@ class DeploymentRunner:
     def print_contract(self) -> None:
         for line in self.contract.summary_lines():
             print(line)
+        if self.policy_kind == "trot1":
+            obs_tail = "trot_phase(2), trot_leg_phase(8), desired_contacts(4), gait_params(3)"
+        elif self.policy_kind == "free":
+            obs_tail = "(no gait terms; gait is emergent)"
+        else:
+            obs_tail = "crawl_phase/crawl_leg_phase(2/8), desired_contacts(4), gait_params(3)"
         print("[OBS] base_ang_vel(3), projected_gravity(3), velocity_command(3), joint_pos_rel(8), "
-              "joint_vel_rel(8), last_action(8), crawl_phase(2), crawl_leg_phase(8), desired_contacts(4), gait_params(3)")
+              f"joint_vel_rel(8), last_action(8), {obs_tail}")
         print("[JOINT-ORDER] " + ", ".join(self.contract.joint_order))
         print(
             "[TRAIN-DEFAULT] "
@@ -602,8 +632,13 @@ class DeploymentRunner:
         joint_velocity_filter = FirstOrderLowPass(self.args.joint_vel_cutoff_hz, self.pipeline.policy_dt)
         joint_vel_obs = [0.0] * 8
         imu_terms = self.imu.sample()
-        gait = crawl_phase_terms(0.0, self.contract.gait_frequency_hz, self.contract.gait_duty_factor,
-                                 self.contract.gait_swing_height, self.command, self.contract.command_deadband)
+        if self.policy_kind == "trot1":
+            gait = self.pipeline.gait_clock.step(self.command)
+        elif self.policy_kind == "free":
+            gait = self.pipeline.placeholder_gait()
+        else:
+            gait = crawl_phase_terms(0.0, self.contract.gait_frequency_hz, self.contract.gait_duty_factor,
+                                     self.contract.gait_swing_height, self.command, self.contract.command_deadband)
         diag_stage = "manual"
         start = time.monotonic()
         last_control = start
@@ -790,8 +825,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         signal.signal(signal.SIGTERM, request_stop)
     try:
         _validate_args(args)
-        contract = DeploymentContract.load(args.policy, action_clip_override=args.action_clip)
-        runner = DeploymentRunner(args, contract, stop_event)
+        if args.policy_kind == "trot1":
+            from .trot1_contract import TrotDeploymentContract
+
+            contract = TrotDeploymentContract.load(args.policy, action_clip_override=args.action_clip)
+        elif args.policy_kind == "free":
+            from .free_gait_contract import FreeGaitDeploymentContract
+
+            contract = FreeGaitDeploymentContract.load(args.policy, action_clip_override=args.action_clip)
+        else:
+            contract = DeploymentContract.load(args.policy, action_clip_override=args.action_clip)
+        runner = DeploymentRunner(args, contract, stop_event, policy_kind=args.policy_kind)
         runner.run()
         return 0
     except KeyboardInterrupt:
