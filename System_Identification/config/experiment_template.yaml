@@ -1,0 +1,75 @@
+schema_version: 1
+status: template_only
+
+identity:
+  run_id: TBD
+  purpose: TBD
+  dataset_role: TBD  # identification | validation | diagnostic
+  operator: TBD
+
+authorization:
+  hardware_motion_authorized: false
+  authorized_scope: documentation_only
+
+versions:
+  repository: E:/HuanCun/Desktop/u2canfd
+  git_commit: TBD
+  git_dirty: TBD
+  python: TBD
+  isaac_sim: TBD
+  isaac_lab: TBD
+  motor_driver: TBD
+
+hardware:
+  robot_revision: unknown
+  fixture: suspended_rigid_base
+  all_legs_contact_free: true
+  emergency_stop_tested: false
+  power_source: unknown
+  bus_voltage_source: unknown
+  motor_model: DM-J8006-2EC-V1.1-unconfirmed
+  motor_register_snapshot: TBD
+
+control_contract:
+  joint_order: TBD
+  sim_dt_s: 0.005
+  decimation: 4
+  policy_rate_hz: 50.0
+  hardware_command_rate_hz: 1000.0
+  kp_nm_per_rad: 28.0
+  kd_nm_s_per_rad: 2.0
+  effort_limit_nm: 8.0
+  saturation_effort_nm: 20.0
+  software_effort_envelope_enabled: unknown
+  action_scale_rad: TBD
+  action_clip: TBD
+
+excitation:
+  type: TBD
+  duration_s: TBD
+  min_frequency_hz: TBD
+  max_frequency_hz: TBD
+  amplitude_rad_by_joint: TBD
+  bias_rad_by_joint: TBD
+  phase_rad_by_joint: TBD
+  random_seed: TBD
+
+safety_limits:
+  joint_position_rad: TBD
+  max_target_delta_rad: TBD
+  max_target_rate_rad_s: TBD
+  max_velocity_rad_s: TBD
+  max_estimated_torque_nm: TBD
+  max_feedback_age_s: TBD
+  max_temperature_c: TBD
+  min_bus_voltage_v: TBD
+  max_bus_voltage_v: TBD
+
+logging:
+  command_events: true
+  feedback_callback_events: true
+  raw_can_frames: true
+  motor_temperature: unknown
+  bus_voltage: unknown
+  imu: false
+

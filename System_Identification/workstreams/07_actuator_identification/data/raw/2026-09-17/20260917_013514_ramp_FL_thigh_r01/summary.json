@@ -1,0 +1,1 @@
+{"run_id": "20260917_013514_ramp_FL_thigh_r01", "joint": "FL_thigh", "canid": 1, "channel": 0, "p0": -0.0749599450675209, "kp": 28.0, "kd": 2.0, "speeds": [0.05, 0.1, 0.15], "t_acc": 0.35, "t_cruise": 0.9, "stop_reason": "完成", "p_final": -0.0661860074769205}

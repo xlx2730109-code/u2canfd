@@ -1,0 +1,9 @@
+canid,name,channel,n_ok,n_miss,p50_ms,max_ms,all_ms
+1,FL_thigh,0,0,60,,,
+2,FL_calf,0,0,60,,,
+3,FR_thigh,1,0,60,,,
+4,FR_calf,1,0,60,,,
+5,RL_thigh,0,0,60,,,
+6,RL_calf,0,0,60,,,
+7,RR_thigh,1,0,60,,,
+8,RR_calf,1,0,60,,,

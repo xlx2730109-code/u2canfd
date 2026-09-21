@@ -1,0 +1,24 @@
+# 匀速斜坡 manifest
+run_id: 20260917_013514_ramp_FL_thigh_r01
+utc_start: 2026-09-16T17:35:39.492426Z
+local_start: 2026-09-17T01:35:14.476918
+operator: xu
+purpose: 07 工作包 - 匀速段量 KD 真实值 + 库仑摩擦/粘性阻尼
+design: 同一速度跑两遍, 只改 dq_des(0 vs v), 于是 KD*v = KP*(Δq_ff0 - Δq_ffv)
+safety:
+  kp: 28.0
+  kd: 2.0
+  speeds_rad_s: [0.05, 0.1, 0.15]
+  travel_per_leg_rad: [0.0625, 0.125, 0.1875]
+  tau_stop_nm: 3.0
+  pos_bounds: [-0.8, 0.8]
+  feedback_timeout_ms: 250
+  zero_position_touched: false   # 全程未发 0xFE
+  result: 完成
+hardware:
+  joint: FL_thigh canid1 ch0 mst 0x11
+  can_device_sn: D6977F56F86C64B77B316E7154FA6DF3
+notes:
+  - 每个往返必定回到 p0, 净位移为 0
+  - 匀速窗口取 T_ACC+0.15 ~ T_ACC+T_CR-0.15, 躲开加减速
+  - 反馈时间戳含驱动批交付(~109ms)影响

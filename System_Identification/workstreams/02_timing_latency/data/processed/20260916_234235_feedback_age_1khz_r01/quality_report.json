@@ -1,0 +1,6 @@
+{
+  "frames_total": 2978,
+  "all_motors_streaming": true,
+  "median_batch_gap_ms": 108.71000000000001,
+  "note": "批间隔=同电机相邻两批到达的间隔, 近似反馈最大时龄"
+}

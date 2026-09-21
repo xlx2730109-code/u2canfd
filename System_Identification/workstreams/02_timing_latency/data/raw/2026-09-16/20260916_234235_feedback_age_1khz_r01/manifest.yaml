@@ -1,0 +1,17 @@
+# 1kHz 空命令流反馈新鲜度 manifest
+run_id: 20260916_234235_feedback_age_1khz_r01
+utc_start: 2026-09-16T15:42:38.389329Z
+local_start: 2026-09-16T23:42:35.060821
+operator: xu
+purpose: 02 工作包 - 真机同款 1kHz 命令流下的反馈到达节奏
+safety:
+  motion_commands: false
+  frame_type: MIT kp=0 kd=0 tau_ff=0 (零力矩, 不使能)
+  tx_rate: 1000Hz 轮询 8 电机
+hardware:
+  can_device_sn: D6977F56F86C64B77B316E7154FA6DF3
+software:
+  python: 3.13.9
+  switch_interval_s: 0.0005
+notes:
+  - 时间戳为主机回调时间, 含 USB/DLL 批量交付影响

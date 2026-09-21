@@ -1,0 +1,29 @@
+# G0 只读快照 manifest
+run_id: 20260916_233405_powered_g0snapshot_r01
+utc_start: 2026-09-16T15:35:02.397559Z
+local_start: 2026-09-16T23:34:05.460281
+operator: xu
+purpose: G0 硬件盘点 - 寄存器快照 + 总线RTT + 反馈新鲜度
+safety:
+  motor_enable: false
+  motion_commands: false
+  frames_sent: 寄存器读(0x33->0x7FF) 与 状态刷新(0xCC->0x7FF) 仅此两类
+hardware:
+  robot: Bennett 8关节四足
+  motors: DM8006 (按现有代码假定, 型号以寄存器SN/ver为准)
+  can_device_sn: D6977F56F86C64B77B316E7154FA6DF3
+  canfd: 仲裁1Mbps 数据5Mbps, USB2CANFD_DUAL
+  can_map: canid1-2=FL thigh/calf ch0, 3-4=FR ch1, 5-6=RL ch0, 7-8=RR ch1, mst_id=0x10+canid
+software:
+  python: 3.13.9
+  script: workstreams/01_hardware_inventory/scripts/g0_snapshot.py
+  driver: damiao.py (auto_enable=False)
+data_files:
+  frames.csv: 全部RX帧(t_host_mono_ns, ch, can_id, dlc, hex)
+  commands.csv: 全部TX事件
+  registers.csv: 寄存器快照(空值=超时无响应)
+  rtt.csv: 刷新->反馈 往返延迟
+  status0.csv: 采集结束时各关节位置/速度/力矩/错误码
+notes:
+  - RTT 为主机发帧到收到反馈帧的主机侧往返, 含驱动与回调调度, 非纯总线时间
+  - 到达间隔在 1kHz 轮询(每台约125Hz)下测得
