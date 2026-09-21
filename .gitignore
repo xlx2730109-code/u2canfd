@@ -8,3 +8,6 @@ logs/
 # Local assistant workspace
 .claude/
 
+# Machine-specific VSCode settings
+.vscode/settings.json
+
