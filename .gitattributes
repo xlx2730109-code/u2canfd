@@ -1,0 +1,34 @@
+# ============================================================
+# 换行符统一策略
+# ------------------------------------------------------------
+# 背景：Windows 端 core.autocrlf=true，Ubuntu 端默认 false。
+# 同一份内容在两边会来回被改写，产生假 diff 甚至把 CRLF
+# 写进历史，形成"切系统就冲突"的乒乓。
+#
+# 规则：所有文本文件在仓库与工作区一律使用 LF。
+# 二进制文件禁止任何换行符转换。
+# ============================================================
+* text=auto eol=lf
+
+# --- 二进制：禁止换行符转换 ---
+*.dll         binary
+*.so          binary
+*.pyd         binary
+*.a           binary
+*.lib         binary
+*.zst         binary
+*.old_m2w64   binary
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.bmp         binary
+*.pdf         binary
+*.zip         binary
+*.npz         binary
+*.npy         binary
+*.pyc         binary
+
+# --- Windows 脚本必须保留 CRLF ---
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
