@@ -17,7 +17,7 @@
 - 新实验应该记录哪些数据：[数据记录规则](docs/DATA_CONTRACT.md)。
 - 真机通电和运动前必须检查什么：[真机安全检查表](docs/HARDWARE_SAFETY_CHECKLIST.md)。
 - 达妙 24 V 官方曲线模型：[电机曲线工作包](workstreams/05_motor_datasheet_model/README.md)。
-- 后续所有任务已经分进 12 个独立工作包，不再把脚本、数据和图片堆在一起。
+- 后续所有任务已经分进 14 个独立工作包，不再把脚本、数据和图片堆在一起。
 
 ## 这项工作不只是在“调电机参数”
 
@@ -34,7 +34,7 @@
 ## 文件夹地图
 
 ```text
-System Identification/
+System_Identification/
 ├── README.md                  # 你现在看的总入口
 ├── Plan.md                    # 真正开工时按它执行
 ├── config/                    # 电脑可读取的实验配置模板
@@ -45,9 +45,10 @@ System Identification/
 │   ├── BASELINE_AUDIT.md      # 旧代码、旧数据检查结果
 │   ├── DATA_CONTRACT.md       # 数据应该怎么记
 │   └── HARDWARE_SAFETY_CHECKLIST.md
+├── params/                    # 辨识结果的唯一出口（仿真只从这里读）
 ├── references/                # 论文、官网和输入资料来源
 └── workstreams/               # 每类工作各放各的
-    ├── 00_control_contract/   # 先对齐命令、频率、增益和限幅
+    ├── 00_model_chain_sw_urdf_usd/ # SW→URDF→USD 质量惯量与几何校核（第一步）
     ├── 01_hardware_inventory/ # 查清真实硬件和固件
     ├── 02_timing_latency/     # 测通信周期、抖动和综合延迟
     ├── 03_joint_mapping_zero/ # 对关节顺序、方向和零位
@@ -58,7 +59,10 @@ System Identification/
     ├── 08_sensor_identification/   # 编码器和 IMU
     ├── 09_contact_identification/  # 脚和地面接触
     ├── 10_simulation_validation/   # 用新动作检验结果
-    └── 11_training_deployment/     # 训练、部署和真机验收
+    ├── 11_training_deployment/     # 训练、部署和真机验收
+    ├── 12_closed_chain_model/      # 闭链（Bennett）模型一致性
+    ├── 13_power_thermal/           # 电池电压与电机温度
+    └── 14_control_contract/        # 对齐命令、频率、增益和限幅
 ```
 
 文件夹名保留英文，是为了以后脚本路径稳定；每个入口文档都用中文解释。

@@ -8,6 +8,8 @@
 | 碰到英文词或缩写，不知道是什么意思 | [GLOSSARY.md](GLOSSARY.md) |
 | 想知道旧代码和旧数据还能不能用 | [BASELINE_AUDIT.md](BASELINE_AUDIT.md) |
 | 准备写采集程序或检查实验文件 | [DATA_CONTRACT.md](DATA_CONTRACT.md) |
+| 想知道 2026-10-08 重新排查出的问题清单 | [AUDIT_v0.md](AUDIT_v0.md) |
+| 想知道网上别人怎么做系统辨识 | [RESEARCH_NOTES.md](RESEARCH_NOTES.md) |
 | 准备让电机通电或运动 | [HARDWARE_SAFETY_CHECKLIST.md](HARDWARE_SAFETY_CHECKLIST.md) |
 
 真正开工顺序仍由根目录 [Plan.md](../Plan.md) 决定。这些说明文档负责解释和约束，不代替每次真机动作前的具体参数确认。

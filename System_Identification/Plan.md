@@ -293,7 +293,7 @@ CMA-ES（自动尝试很多组参数的方法）建议：
 
 | 工作包 | 负责内容 | 典型输出 |
 |---|---|---|
-| `00_control_contract` | 对齐仿真、策略和真机的动作、观测、频率、PD 和限幅 | 控制配置 YAML、差异报告 |
+| `14_control_contract` | 对齐仿真、策略和真机的动作、观测、频率、PD 和限幅 | 控制配置 YAML、差异报告 |
 | `01_hardware_inventory` | 电机、固件、寄存器、电源、工装和安全能力 | 设备清单、寄存器快照 |
 | `02_timing_latency` | 发送、接收、反馈有多旧、周期抖动和综合延迟 | 原始事件记录、延迟报告 |
 | `03_joint_mapping_zero` | joint order、CAN ID、方向、零位、机械限位 | 映射表、标定结果 |
@@ -364,3 +364,36 @@ CMA-ES（自动尝试很多组参数的方法）建议：
 - SPI-Active：https://arxiv.org/abs/2505.14266
 - 高减速比 Stribeck 扩展：https://www.mdpi.com/2075-1702/14/9/1031
 - 达妙 DM-J8006-2EC V1.1 产品页：https://www.mdmbot.com/index.php?c=show&id=103
+
+---
+
+## 12. 2026-10-08 修订（用户重启系统辨识）
+
+范围：目标是尽可能多地辨识机器人方面的参数，提高 RL 策略的 sim2real 迁移效果。旧数据（09-16/17）不进新数据集，见各工作包 `data/LEGACY.md`。
+
+### 12.1 新增约束与已知问题
+- **腿已装好，不能拆；无单电机台架；无备件。** 质量/质心/惯量用整机法（04）；执行器用整机悬空拟合（07），转矩常数 KT 与摩擦的置信度单独标注。
+- **两块电池**（4000/5300 mAh）换着用，每次实验记录哪块、起止电压。
+- **双平台**：Jetson（Linux）与 Windows 都部署。Linux `.so` 和 Windows 官方 DLL 都含 100 ms 批量交付常量；Windows 有补丁版 `dlls_lowlatency/`，Linux 未补丁。采集必须记录 DLL profile 与 SHA256。
+- **寄存器**：8 台电机 `TIMEOUT=0`（无通信看门狗）；`OC_Value=0.8` 含义待查；`sub_ver` 51/52 混用；`FR_thigh` 与 `RL_thigh` 部分寄存器逐位相同，疑似读错；`KT_Value=0`。
+- **符号表冲突**：`3_quad_leg_track.py` 中 FL/RL_thigh=-1（实机验证），`bennett_deploy/contract.py`=+1。
+- **训练配置**：`DCMotor`，armature/friction 空，无延迟；随机化只覆盖基座质量与质心，腿部质量惯量、关节摩擦、延迟没有。
+- 详细见 `docs/AUDIT_v0.md`。
+
+### 12.2 新增工作包
+- `00_model_chain_sw_urdf_usd`：**第一步**。SW 质量惯量 → URDF → USD → MuJoCo 逐级校核；原 `00_control_contract` 改名为 `14_control_contract`。
+- `12_closed_chain_model`：URDF/USD/MuJoCo 闭环一致性与实物装配误差。
+- `13_power_thermal`：电池压降与电机温度。
+- 根目录 `params/`：辨识结果唯一出口。
+
+### 12.3 关卡调整
+- G0 增加：DLL/`.so` profile 与低延迟补丁的实测延迟；TIMEOUT 是否开启；OC_Value/KT_Value 含义；符号表统一。
+- 最先做第 00 包（纯软件，不动电机、不接真机），再做第 04 包实测（不动电机）：整机称重、悬吊、扭摆，与 SW（API 只读）/URDF 对齐。
+- G6 增加：训练端加入辨识得到的电枢惯量、摩擦、延迟，并把随机化范围设为实测不确定度。
+
+### 12.4 待确认（更新）
+- [ ] 达妙官方 DM-J8006-2EC 质量，用于核对 SW 电机模型；
+- [ ] 两块电池各自的实测质量；
+- [ ] 3D 打印件材料、密度、填充率（SW 里设的是什么密度）；
+- [ ] Jetson 的 CAN 驱动方案（arm64 `.so` 是否已补丁）；
+- [ ] 其余沿用第 10 节未勾选项。
