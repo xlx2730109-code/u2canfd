@@ -159,3 +159,7 @@ YYYYMMDD_HHMMSS_<rig>_<motion>_<repeat>
 - 时间戳无倒退；
 - 每个关节的运动范围和测试频率覆盖了以后真正关心的运动；
 - 找参数的数据和用来考试的新数据没有重复实验。
+
+
+## 补充字段（2026-10-08）
+每个 manifest 还必须写：`battery`（4000 或 5300 mAh）、`v_start`、`v_end`（V，万用表或电源读数）、`dll_profile`（original / low_latency / linux_so）和 `dll_sha256`。

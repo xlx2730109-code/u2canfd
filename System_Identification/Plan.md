@@ -293,17 +293,14 @@ CMA-ES（自动尝试很多组参数的方法）建议：
 
 | 工作包 | 负责内容 | 典型输出 |
 |---|---|---|
-| `14_control_contract` | 对齐仿真、策略和真机的动作、观测、频率、PD 和限幅 | 控制配置 YAML、差异报告 |
+| `00_model_chain_sw_urdf_usd` | SW 质量惯量 → URDF → USD → MuJoCo 逐级校核，闭环与足端位置，再到真机称重/质心/惯量 | 逐 link 对表、实测参数 |
 | `01_hardware_inventory` | 电机、固件、寄存器、电源、工装和安全能力 | 设备清单、寄存器快照 |
 | `02_timing_latency` | 发送、接收、反馈有多旧、周期抖动和综合延迟 | 原始事件记录、延迟报告 |
-| `03_joint_mapping_zero` | joint order、CAN ID、方向、零位、机械限位 | 映射表、标定结果 |
-| `04_rigid_body_properties` | 几何、质量、质心、惯量 | CAD/测量证据、参数文件 |
+| `03_joint_zero_calibration` | 8 个关节的零位偏差（工装/倾角仪/机械极限法） | 零位偏差表 |
 | `05_motor_datasheet_model` | 从厂家图片读取数据、实现转矩—转速上限和模型 A/B | 曲线模型、检查记录、对比图 |
 | `06_data_acquisition` | 通用记录工具、字段格式、实验身份证和数据检查 | 采集代码、假数据试跑 |
 | `07_actuator_identification` | 有效折算惯量、摩擦、偏差、延迟和必要的扩展模型 | 拟合数据、参数和报告 |
 | `08_sensor_identification` | 编码器、IMU、同步、噪声和偏置 | 传感器标定报告 |
-| `09_contact_identification` | 地面摩擦、恢复、接触刚度/阻尼 | 接触参数与验证 |
-| `10_simulation_validation` | 用没参与调参的新动作重放、比较并选模型 | 对比图、新动作验证报告 |
 | `11_training_deployment` | 独立训练、策略 A/B、部署方式对齐和真机验收 | 训练/部署报告 |
 
 工作包状态与入口统一记录在 `workstreams/README.md`。
@@ -380,15 +377,13 @@ CMA-ES（自动尝试很多组参数的方法）建议：
 - **训练配置**：`DCMotor`，armature/friction 空，无延迟；随机化只覆盖基座质量与质心，腿部质量惯量、关节摩擦、延迟没有。
 - 详细见 `docs/AUDIT_v0.md`。
 
-### 12.2 新增工作包
-- `00_model_chain_sw_urdf_usd`：**第一步**。SW 质量惯量 → URDF → USD → MuJoCo 逐级校核；原 `00_control_contract` 改名为 `14_control_contract`。
-- `12_closed_chain_model`：URDF/USD/MuJoCo 闭环一致性与实物装配误差。
-- `13_power_thermal`：电池压降与电机温度。
-- 根目录 `params/`：辨识结果唯一出口。
+### 12.2 工作包精简（2026-10-12）
+保留 9 个：00 模型链校核（含真机称重，并入原 04 与闭链一致性）、01 硬件固件、02 时序延迟、03 关节零位（只做零位）、05 电机曲线、06 数据记录、07 执行器辨识（含新动作考试）、08 传感器、11 训练部署（含脚垫摩擦可选项）。
+并入/删除：原 09（接触）→ 11 可选项；原 10 → 07 最后一步；原 12 → 00 第 3 关；原 13 → 每次实验记录电池与起止电压；原 14 → `docs/CONTROL_CONTRACT.md`。根目录 `params/` 为辨识结果唯一出口。
 
 ### 12.3 关卡调整
 - G0 增加：DLL/`.so` profile 与低延迟补丁的实测延迟；TIMEOUT 是否开启；OC_Value/KT_Value 含义；符号表统一。
-- 最先做第 00 包（纯软件，不动电机、不接真机），再做第 04 包实测（不动电机）：整机称重、悬吊、扭摆，与 SW（API 只读）/URDF 对齐。
+- 最先做第 00 包（纯软件加称重，不动电机）：整机称重、悬吊、扭摆，与 SW（API 只读）/URDF 对齐。
 - G6 增加：训练端加入辨识得到的电枢惯量、摩擦、延迟，并把随机化范围设为实测不确定度。
 
 ### 12.4 待确认（更新）
