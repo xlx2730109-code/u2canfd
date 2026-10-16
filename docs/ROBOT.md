@@ -1,0 +1,183 @@
+# Bennett 四足机器人总览（ROBOT.md）
+
+这是用户（徐龙翔）的四足机器人的总览。**任何会话里涉及这台机器人，先读本文件全文**，再按需读各工作包 README（路径见第 11 节）。
+
+状态标记：【已确认】读文件或实测得到；【用户确认】用户亲口说明；【推测】我推断，没验证；【未知】还不知道。最后更新：2026-10-15。
+
+## 1. 课题与目标
+
+- 课题：《空间过约束多模式附肢设计与四足机器人行为生成研究》，北京交通大学机电学院，机械工程，学生徐龙翔（25121068），导师武建昫。开题 2026-09 通过。【已确认】
+- 对象：Bennett 空间过约束四足机器人（每腿 2 个主动关节，整机 8 个）。
+- 研究内容：机构建模与负载匹配、闭链仿真模型、多地形强化学习（Isaac Lab + PPO）、Sim2Sim（MuJoCo）与 Sim2Real、系统辨识；后续用附肢折展面探索步行加划水的多模式。
+- 当前阶段：系统辨识。第一个工作包（00 号，模型链校核）已收尾，下一个是通信辨识（02 号）。
+- 另一件事（Novelty，新机构探索）与本机器人无关，不在本文件范围。
+
+## 2. 构型与运动学
+
+**整体**【已确认】
+- 8 个主动关节，顺序固定：`FL_thigh, FL_calf, FR_thigh, FR_calf, RL_thigh, RL_calf, RR_thigh, RR_calf`。
+- 机体约 58 × 43 × 40 cm（长 × 宽 × 站立高）；腿模块化，四条腿前后左右镜像布置。
+- 样机的装配方式按**右腿**来，左腿是右腿的镜像【用户确认】。
+
+**一条腿**【已确认】
+- thigh 与 calf 两个电机**同轴**，轴线倾斜 45°：轴向 (0, ±0.707, 0.707)（左 +、右 −），calf 轴相对 thigh 沿轴偏移 0.0357 m。
+- thigh 绕这根斜轴带动整条腿转动；calf 驱动腿内部的闭环。
+- 闭环是空间 Bennett 四杆：thigh、calf、`_2`、`_1` 四个杆件、四个转动副。加 thigh 的主动关节，整腿 **2 个自由度**。
+- 三个被动关节 `_3`、`_1`、`_2` 只取决于 calf，与 thigh 无关：calf = −0.85 时 (`_3`, `_1`, `_2`) = (1.044, −1.044, −0.830)，calf = 0 时全 0，calf = 0.5 时 (−0.870, 0.870, 0.479)。
+- 名义几何参数（开题报告）：a = 180 mm，α = β = 45°，装配角 σ = 145°，Bennett 条件 a/sinα = b/sinβ。
+
+**足端工作空间**【已确认】
+- 理论上是以那根斜轴为轴的圆环面（开题报告 `工作空间-3.png`）；训练用的关节范围只覆盖其中一块。
+- 前左腿（thigh −0.8 到 0.8，calf −0.9 到 0.55，机身系，髋在 x 0.211、y 0.068）：x −0.143 到 0.435 m，y 0.009 到 0.392 m，z −0.282 到 −0.068 m；髋到足 0.161 到 0.400 m。
+- 默认站姿：thigh（FL、RL 为 +0.08，FR、RR 为 −0.08）、calf −0.16；前左足端 (0.204, 0.184, −0.269) m，几乎在髋正下方（x 差 7 mm），向外撑开约 0.12 m。
+- 没有奇异位置问题；关节位置、轴方向无误【用户确认】；关节范围没有独立核对，训练出来的策略一般不别扭【用户确认】。
+- 训练用关节限位：thigh ±0.8 rad，calf −0.9 到 0.55 rad；被动关节 ±3.14。
+
+**零位**【用户确认】
+- 模型（SW、URDF、USD）的零位是 SW 展示的姿态。样机零位是用户肉眼标定的，无法与模型零位完全一致，可能有误差，大小未知。
+
+## 3. 硬件
+
+**电机**【已确认】8 × 达妙 DM-J8006-2EC V1.1
+- 减速比 6:1，额定转矩 8 N·m，峰值 20 N·m，双编码器；单个质量 559 g（经销商，与 SW 一致）。
+- 寄存器快照（2026-09-16，不使能读取）：Gr 6，NPP 21，PMAX 12.5，VMAX 45，TMAX 20，`KT_Value` 0，`GREF` 1，`Damp` 约 5e-4 到 1.1e-3，`Inertia` 约 1.2e-4，`Rs` 约 0.41，`KP_APR` 54，`I_BW` 1000，`V_BW` 40；**`TIMEOUT` 0（无通信看门狗）**，**`OC_Value` 0.8（含义待查）**，`UV_Value` 15，`OV_Value` 54，`OT_Value` 100；`sub_ver` 51 与 52 混用（`RL_calf`、`RR_thigh`、`RR_calf` 为 52）；`FR_thigh` 与 `RL_thigh` 的 `Rs`、`LS`、`Flux`、`Damp`、`Inertia` 逐位相同（疑为读错）。
+- MIT 模式命令：`τ = Kp·Δq + Kd·Δv + τff`，Kp 12 bit 0–500，Kd 12 bit 0–5，位置 16 bit ±12.5 rad，速度 12 bit ±45，转矩 12 bit ±20；编码用截断。
+- 输出端读数就是关节角（1:1，不用乘 6）。
+
+**通信**【已确认】
+- USB2CANFD 双路，CAN-FD，仲裁 1 Mbps，数据 5 Mbps。
+- CAN ID：ch0 = id 1,2,5,6（FL_thigh、FL_calf、RL_thigh、RL_calf），ch1 = id 3,4,7,8（FR、RR）；反馈 ID = 0x10 + 发送 ID。
+- 达妙官方 `libdm_device.dll`（Windows）与 Linux `.so` 里有 100 ms 批量交付常量：反馈每约 109 ms 一批，控制器拿到的角度平均旧约 55 ms。Windows 有补丁版 `dlls_lowlatency/`（改成 1 ms），Linux 未补丁。补丁版的真实延迟**没测过**。
+
+**计算与传感**
+- Jetson（具体型号【未知】，SW 里有 Nano 与 DM-ORIN NX 两种文件）+ 手柄接收器；Windows 电脑与 Jetson 都用于部署；Jetson 联网问题仍在解决【用户确认】。
+- IMU：DM-IMU，USB 串口 COM6，921600 baud，约 1000 Hz；reg1 加速度、reg2 角速度（rad/s）、reg3 欧拉角。已做安装倾角标定（倾角 1.13° → 0.72°）。【已确认】
+- 电子部分的更多细节用户说在通信辨识时讲【未知】。
+
+**供电**：6S 锂电，**5300 mAh 和 4000 mAh 两块换着用**；计算单元独立 12 V，降压模块；XT60 与电源分配板。【已确认】
+
+**材料**：铝合金（腿部连接件、大腿、小腿，密度 2800）和碳纤维（连杆、碳板、碳管，2000）为主；电机连接件 1 为 3D 打印塑料（1250）；螺栓钢。机身是 SW 里的碳板碳管。【已确认】
+
+## 4. 质量
+
+| 模型 | 总质量 kg | 比样机 11.7 |
+|---|---:|---:|
+| 样机（5300 mAh） | 11.700 | — |
+| 样机（4000 mAh） | 11.550 | — |
+| SW（5300 mAh） | 11.980 | +0.28 |
+| URDF（不含 `X_3`） | 11.968 | +0.27 |
+| USD | 11.968 | +0.27 |
+| MuJoCo（`_3` 设为 0.001 kg） | 11.972 | +0.27 |
+
+- 样机称重：样机 + 机架 14.5 kg（5300 mAh），机架 2.8 kg。
+- SW 偏重 0.28 kg 的原因没定位（SW 没建线缆本应偏轻，说明有零件被高估）；没有小秤，不做分件称重，用域随机化覆盖。
+- SW 有 7 种零件覆盖了质量：电机 0.559 × 8 = 4.47 kg（占 37%）、电池 0.663、Jetson 供电 0.339、Jetson 套件 0.182、足 0.072 × 4、碳管连接件、亚克力外框。覆盖后惯量只是按几何等比例缩放，质心不变。
+- 各杆件（URDF = USD）：base 5.0514 kg（含机身、电池、Jetson、供电、电子件、四个腿 base），质心 (0.00475, 0.00003, 0.01319) m，主惯量 0.01924 / 0.1432 / 0.1531；thigh 0.99385、calf 0.30971、`_1` 0.16224、`_2` 0.19132、足 0.072，各 × 4。
+- 大腿惯量以 SW 右大腿为准（0.000690 / 0.003671 / 0.003934），左大腿取镜像（ixy、iyz 变号）。
+- 质心、惯量没有实测（没有条件）。
+
+## 5. 模型文件
+
+链：SW →（手调质量惯量）URDF → USD；URDF → MuJoCo XML（脚本生成）。
+
+| 模型 | 位置 | 状态 |
+|---|---|---|
+| SW | `E:\HuanCun\Desktop\sw_work\Bennett\Bennett_1\Bennett_test5.SLDASM` | 只用 `Bennett_1`；只读，走 COM API，不点界面 |
+| URDF | `bennett_rl/source/bennett_rl/bennett_rl/assets/robots/Urdf_Bennett_3/urdf/Urdf_Bennett_3.urdf` | 25 个 link，每腿多一个闭链用的 `X_3`（`_2` 的复制体，不算质量）；哈希 affac3c8841ccedb |
+| USD（**以后训练用**） | 同目录 `Urdf_Bennett_3.usd` | 21 个刚体，无 `_3`；哈希 a4a6ed72c6a287a1 |
+| USD（不再用） | `Urdf_Bennett_4/urdf/Urdf_Bennett_3.usd` | 碰撞体做过简化，已同步更新质量惯量；哈希 8a01726eb20cfd2d |
+| MuJoCo | `bennett_rl/sim2sim/models/bennett_3/bennett_3.xml`（同目录 `_genfinal.py` 生成） | 25 个刚体，总质量 11.972 kg；哈希 fe07b42372c534d3；旧 17 刚体模型在 `bennett_3_wuzuduan/`，`bennett_1/` 是 base 仍 4.22 的旧版 |
+
+**闭链处理**【已确认】
+- USD：闭合关节是完整转动副（`calf → _2` 与 `thigh → _1`，后者 `excludeFromArticulation = True`）；设计姿态下 4 条腿 × 5 个关节的框架位置、方向间隙全为 0。
+- MuJoCo：复制杆 `_3` 加 `<connect>` 点约束（`solref 0.01 1`）；工作空间闭环间隙 ≤ 0.095 mm，重力加接触落地 3 s 最大间隙 0.653 mm。
+- MuJoCo 的 `_3` 刚体删不掉（它是点约束所需）；质量降到 0.001 kg。
+- **教训**：`_3` 近无质量（1 g）与被动关节 armature 近 0（1e-5）不能同时做，否则重力加接触下闭环张开 21 mm、机身塌；改 MuJoCo 必须做动态验证。
+- MuJoCo 生成脚本的旧 bug 已修：特征向量矩阵可能带反射，需要检查行列式（影响 thigh、calf、足 12 个刚体的惯量方向）。
+- 默认站姿下被动关节若保持 0，闭环间隙 34 到 38 mm，使用前要先解闭环。
+- MuJoCo 所有关节默认 armature 0.01、damping 0.001、frictionloss 0.05（含被动关节），与 Isaac 不一致，不对齐（重点是训练迁移）。
+- MuJoCo 打不开含中文的路径。
+
+## 6. 仿真与训练
+
+**Isaac Lab**（仓库 `E:\Project\Isaaclab\bennett_rl`）【已确认】
+- 物理步长 0.005 s（200 Hz），decimation 4，策略 50 Hz；4096 并行环境，episode 20 s；PPO（rsl_rl）3000 次迭代，学习率 1e-3。
+- 执行器：`DCMotor`，kp 28、kd 2，力矩限 8 N·m、饱和 20、速度限 20 rad/s；**armature、摩擦为空，没有延迟**。
+- 动作 = 默认姿态 + 0.2 × action，按关节限位裁剪。
+- Trot1 观测 50 维：机体角速度、重力投影、速度指令、关节位置（相对默认）、关节速度、上一步动作、步态相位。观测噪声：角速度 ±0.2、重力 ±0.05、关节位置 ±0.01、关节速度 ±1.5。
+- 现有域随机化（Trot1）：执行器增益 Kp ×0.8–1.2、Kd ×0.7–1.3；摩擦 0.6–1.3；base 质量 ×0.9–1.1、base 质心 ±0.02 m；推力。**腿部杆件质量、关节摩擦、延迟、关节零位偏置都没有随机化。**
+- 任务：`quad_leg_trot`（trot1、trot-motor-ab）、`quad_leg_free_gait`（1 到 4）、`quad_leg_go2`（7、8、10、11、12、13、slope1）、`quad_leg_gravel`、`quad_leg_slope`、`quad_leg_stair`、`quad_leg_standing_1/2`、`quad_leg_track`、`single_leg_rr_trace`、`single_leg_rr_jct` 等。
+- **USD 指向**：`BENNETT_CFG_V6`（指向 `_4`）被 trot1、go2-11/12/13、go2-slope1、gravel1、slope3/4、stair1 使用；`go2-8`、`go2-10`、`single_leg_rr_jct` 用 `_3`。用户决定以后都用 `_3`，要训练时再改配置；`_3` 的碰撞体未简化，训练可能变慢。
+- 历史问题：free_gait4 把抬腿高度加倍后训练崩溃（std 出现负值），效果差；抬腿高度一直难调。
+- 域随机化范围**一律待定，不给具体数值**，后续再分析。候选项：base 质量、腿部杆件质量、base 质心、惯量、关节零位偏置。
+
+**sim2sim（MuJoCo）**：`bennett_rl/sim2sim/sim2sim.py --task <名> --endpoint_trail`；用户验证 sim2sim 没问题。
+
+## 7. 真机部署
+
+代码在 `E:\HuanCun\Desktop\u2canfd`【已确认】
+- 运行时 `quad_leg_xu/bennett_deploy/`（`runtime.py`、`dm_can.py`、`contract.py`、`imu.py` 等）；根目录 `damiao.py` 等是早期脚本，只加载官方 DLL。
+- 主循环：命令 1 kHz，策略 50 Hz；起动状态机：回默认姿态 → 预热 → 等待授权 → 策略。
+- 关节速度与 IMU 各加 12 Hz 一阶低通（训练里没有对应滤波）。
+- `--dm_sdk_profile low_latency` 选补丁版 DLL；`quad_leg_trot1_deploy.py` 没传这个参数，默认走官方版（109 ms 批量）。
+- 软件力矩限 `--software_effort_limit_nm` 默认 0（关闭）；训练限 8 N·m，固件 TMAX 20。
+- `sim_to_motor` 符号：`3_quad_leg_track.py` 里 FL、RL 的 thigh 为 −1（实机验证过），`bennett_deploy/contract.py` 里是 +1，冲突。
+- `技术文档_1.md` 里"关节指令乘 6"已被实测推翻。
+- 反馈超时默认 0.5 s，对 109 ms 批量交付不会触发，等于没有保护。
+
+## 8. 已知问题与风险
+
+1. 通信：官方 DLL / Linux `.so` 的 100 ms 批量交付；补丁版延迟没测过；开题里的"约 36 ms"是批相位，不是常数。
+2. 电机 `TIMEOUT` = 0，上位机崩溃时电机会保持最后一条命令。
+3. 训练的执行器没有延迟、摩擦、电枢惯量（折算转子惯量约 1.2e-4 × 36 ≈ 4.4e-3，待验证）。
+4. 训练 USD 指向仍有 `_4`（见第 6 节）。
+5. 样机零位肉眼标定，误差未量化。
+6. 旧系统辨识数据（2026-09-16、09-17）用的是官方 DLL，只作线索，不进新数据集。
+7. 旧辨识结论里"传输延迟约 0.0–0.2 ms"是被批量交付骗了的结果。
+
+## 9. 系统辨识
+
+- 工作区：`E:\HuanCun\Desktop\u2canfd\System_Identification\`，总计划 `Plan.md`（关卡 G0–G7），工作包在 `workstreams/`。
+- 9 个工作包：00 模型链校核（**已收尾**）、01 硬件固件、02 时序延迟（**下一个**）、03 关节零位、05 电机曲线、06 数据记录、07 执行器辨识（含新动作考试）、08 传感器、11 训练部署。
+- 每个工作包有 `claude/`、`codex/`、`comparison/`、`inputs/` 子目录（Claude 与 Codex 各做一份再对比）。
+- 规则：原始数据只增不改；每次实验写 manifest（含电池、起止电压、DLL 版本与哈希）；拟合集与考试集分开；**未经用户当次明确同意，不使能电机、不发送运动命令**。
+- 通信辨识第一步：不使能电机、零力矩，测反馈周期和延迟；测量时不要同时在同一台电脑上跑训练。
+
+## 10. 已做的决定与已接受的近似
+
+- 训练以后用 `Urdf_Bennett_3` 的 USD；MuJoCo 用 `bennett_3.xml`。
+- SW 比样机重 0.28 kg 不再追查，用域随机化覆盖。
+- SW 框选 base 漏了亚克力外框和双头螺杆（约 0.0124 kg），不补。
+- 质心、惯量不实测；关节位置、轴方向不再跨模型核对。
+- MuJoCo 与 Isaac 的被动关节参数不对齐；sim2sim 初始化不用改。
+- 对迁移最重要的是执行器模型和延迟，不是 USD 本身（调研结论：执行器与延迟 > 关节摩擦 > 观测设计 > 质量惯量）。
+
+## 11. 路径索引
+
+| 内容 | 路径 |
+|---|---|
+| 本文件 | `E:\HuanCun\Desktop\u2canfd\docs\ROBOT.md` |
+| 00 号包（最详细，含质量表、闭链、哈希） | `E:\HuanCun\Desktop\u2canfd\System_Identification\workstreams\00_model_chain_sw_urdf_usd\README.md` |
+| 系统辨识总计划 | `E:\HuanCun\Desktop\u2canfd\System_Identification\Plan.md` |
+| 排查记录（通信、寄存器、训练配置） | `E:\HuanCun\Desktop\u2canfd\System_Identification\docs\AUDIT_v0.md`、`BASELINE_AUDIT.md` |
+| 训练代码 | `E:\Project\Isaaclab\bennett_rl`（`SIM2REAL_PIPELINE.md` 是 sim2real 全流程清单） |
+| 部署代码 | `E:\HuanCun\Desktop\u2canfd\quad_leg_xu\bennett_deploy\` |
+| 开题材料 | `E:\HuanCun\Desktop\徐龙翔\归档\开题\`（最终版 `材料_提交\20260917_徐龙翔-开题报告.docx`；配图 `材料_配图、视频、Gif\`） |
+| 工作区临时文件 | `E:\HuanCun\AI_tmp\Claude\` |
+
+## 12. 未知与待确认
+
+- 电子部分的细节（Jetson 型号、供电细节、传感器清单）：用户说通信辨识时讲。
+- 补丁版 DLL 的真实反馈延迟、Linux 上的情况。
+- 电机寄存器 `OC_Value`、`KT_Value` 的含义；`FR_thigh`/`RL_thigh` 寄存器相同的原因。
+- 折算到关节的电枢惯量、摩擦、延迟（执行器辨识要得到）。
+- 样机零位偏差的大小；真机的齿隙、松动（旧笔记提过"其他腿有点松动"）。
+- 足的形状、半径、软硬、摩擦（仅有 URDF 网格和 0.072 kg）。
+
+## 13. 协作偏好
+
+- 用中文、通俗；做事要快，超过一分钟的操作先说明；只做被要求的范围，别扯远。
+- 软件（SolidWorks 等）一律走 API，不点界面，SW 只读。
+- 两个仓库（u2canfd、bennett_rl）的代码必须 Windows 与 Linux 都能跑，用 `pathlib`，LF 换行，Windows 专属的东西用 `sys.platform` 判断。
+- 临时文件放 `E:\HuanCun\AI_tmp\Claude\任务简称_日期\`。
+- 有工作量大的任务，用 README 笔记（基准与结论 / 已完成 / 待完成），格式见全局规则。
