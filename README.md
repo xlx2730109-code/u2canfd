@@ -274,23 +274,53 @@ SW 质量覆盖的 7 种零件：
 
 ### A. 命令
 
-在 `sim2real/` 下运行。**`--check_only` 与 `--dry_run` 不使能电机、不发运动命令；去掉它们就会连接并驱动真机，须用户当次明确同意。**
+在 `u2canfd/` 下运行（在 `sim2real/` 下运行时去掉 `sim2real/` 前缀）；用装有 torch 的环境（`env_isaaclab`）。**`--check_only` 与 `--dry_run` 不使能电机、不发运动命令；其余命令会连接并驱动真机，须用户当次明确同意。**
+
+不开电机的校验与试运行：
 
 ```
-python bennett_1_crawl_deploy.py --check_only
-python bennett_1_crawl_deploy.py --dry_run --keyboard
-python bennett_1_free_deploy.py --check_only
-python tools/dev_sn.py
+python sim2real/bennett_1_crawl_deploy.py --check_only
+python sim2real/bennett_1_crawl_deploy.py --dry_run --keyboard
+python sim2real/bennett_1_free_deploy.py --check_only
+python sim2real/tools/dev_sn.py
 ```
 
-- `bennett_1_crawl_deploy.py`：bennett_1 爬行变体，缺省策略 T9，与 sim2sim 配置 `bennett_1_crawl` 一致。
-- `bennett_1_free_deploy.py`：bennett_1 自由步态，缺省策略 S1，与 sim2sim 配置 `bennett_1_free` 一致。
-- 换策略：环境变量 `BENNETT1_CRAWL_RUN`、`BENNETT1_FREE_RUN`（运行目录名），或 `--policy <exported/policy.pt>`；运行目录须含 `params/env.yaml`、`params/agent.yaml`、`exported/policy.pt`。
-- 键盘：`w`/`s` 前后，`a`/`d` 侧移，`j`/`l` 转向，`0`/`x` 清零，空格或回车授权策略，`q` 或 Esc 退出；键盘指令范围缺省取各策略的训练范围。
-- `--check_only`：只校验训练配置与 TorchScript 策略，不打开 IMU 与电机。
-- `--dry_run`：读 IMU、跑策略，不打开电机。
+真机运行（开电机）：
+
+```
+python sim2real/bennett_1_crawl_deploy.py --keyboard
+python sim2real/bennett_1_free_deploy.py --keyboard
+python sim2real/quad_leg_free_gait3_deploy.py --keyboard
+python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latency
+```
+
+入口脚本：
+
+| 入口 | 策略 |
+| --- | --- |
+| `bennett_1_crawl_deploy.py` | bennett_1 爬行变体，缺省 T9，与 sim2sim 配置 `bennett_1_crawl` 一致 |
+| `bennett_1_free_deploy.py` | bennett_1 自由步态，缺省 S1，与 sim2sim 配置 `bennett_1_free` 一致 |
+| `quad_leg_free_gait3_deploy.py`、`quad_leg_free_gait4_deploy.py` | 旧的自由步态策略，取 `quad_leg_free_gait` 下最新导出 |
+| `quad_leg_go2-10_deploy.py`、`quad_leg_trot1_deploy.py` | go2-10、trot1 |
+
+常用参数（各入口通用，加在命令后面，顺序不限）：
+
+| 参数 | 作用 |
+| --- | --- |
+| `--keyboard` | 键盘给速度指令；电机回到默认姿态并预热后，按空格或回车才启动策略 |
+| `--check_only` | 只校验训练配置与 TorchScript 策略，不打开 IMU 与电机 |
+| `--dry_run` | 读 IMU、跑策略，不打开电机 |
+| `--dm_sdk_profile original` / `low_latency` | 选电机动态库：`original`（缺省）为官方版，反馈约每 109 ms 一批；`low_latency` 为补丁版，批量间隔改为 1 ms，真实延迟未测，仅 Windows 有。用 T9 等训练时没加滞后的策略、真机迟钝或摔倒时再试 |
+| `--imu_port <串口>` | IMU 串口；Windows 缺省 `COM6`，Linux 缺省 `/dev/ttyACM0`（推测），以实际枚举为准 |
+| `--output_scale <0–1>` | 策略动作的缩放，首次试验取小值 |
+| `--active_joints rr` | 只驱动 RR 的两个关节，缺省 `all` |
+| `--duration_s <秒>` | 运行时长，缺省 0 为不限 |
+| `--policy <路径>` | 指定 `exported/policy.pt`；运行目录须含 `params/env.yaml`、`params/agent.yaml` |
+
+其他：
+- 键盘：`w`/`s` 前后，`a`/`d` 侧移，`j`/`l` 转向，`0`/`x` 清零，空格或回车授权策略，`q` 或 Esc 退出；指令范围缺省取各策略的训练范围。
+- 换 bennett_1 的策略：环境变量 `BENNETT1_CRAWL_RUN`、`BENNETT1_FREE_RUN`（运行目录名），或 `--policy`。
 - 训练仓库定位：环境变量 `BENNETT_RL_ROOT`，否则取同级目录 `bennett_rl`，再否则取本仓库所在盘符下的 `Project/Isaaclab/bennett_rl`。
-- Linux 的 IMU 串口缺省为 `/dev/ttyACM0`（推测），以实际枚举为准，用 `--imu_port` 覆盖。
 
 ### B. 文件夹结构
 
