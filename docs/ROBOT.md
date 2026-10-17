@@ -2,7 +2,7 @@
 
 这是用户（徐龙翔）的四足机器人的总览。**任何会话里涉及这台机器人，先读本文件全文**，再按需读各工作包 README（路径见第 11 节）。
 
-状态标记：【已确认】读文件或实测得到；【用户确认】用户亲口说明；【推测】我推断，没验证；【未知】还不知道。最后更新：2026-10-15。
+状态标记：【已确认】读文件或实测得到；【用户确认】用户亲口说明；【推测】我推断，没验证；【未知】还不知道。最后更新：2026-10-16。
 
 ## 1. 课题与目标
 
@@ -31,6 +31,8 @@
 - 前左腿（thigh −0.8 到 0.8，calf −0.9 到 0.55，机身系，髋在 x 0.211、y 0.068）：x −0.143 到 0.435 m，y 0.009 到 0.392 m，z −0.282 到 −0.068 m；髋到足 0.161 到 0.400 m。
 - 默认站姿：thigh（FL、RL 为 +0.08，FR、RR 为 −0.08）、calf −0.16；前左足端 (0.204, 0.184, −0.269) m，几乎在髋正下方（x 差 7 mm），向外撑开约 0.12 m。
 - 没有奇异位置问题；关节位置、轴方向无误【用户确认】；关节范围没有独立核对，训练出来的策略一般不别扭【用户确认】。
+- 足端运动耦合【已确认，2026-10-16 用 MuJoCo 模型算前左腿，右腿与后腿按镜像、同构推断】：默认站姿下足端相对髋 (−0.007, 0.110, −0.278) m；thigh 每转 1 rad，足端基本只沿 x 前后移 0.274 m；calf 每转 1 rad，足端移 (x −0.157, y +0.258, z −0.111) m，即 calf 同时决定横向位置与高度，没有独立的外展自由度。
+- 腿接近伸直【已确认】：足端相对髋最低 z 为 −0.294 m，默认 −0.278 m，机身最多只能再升 16 mm。calf 退 0.1 rad 时足端抬高 12.8 mm，同时向内 24.4 mm、向前 14.4 mm；向外移动几乎不改变高度，向内必须抬脚；默认站姿在“向内”的极限（同一高度下向内只剩 5–11 mm），侧移比前后移动更受机构限制，但已被训练出来（用户确认）。机身越低，足端活动范围越大。详见 `bennett_rl/README.md` 的 K37。
 - 训练用关节限位：thigh ±0.8 rad，calf −0.9 到 0.55 rad；被动关节 ±3.14。
 
 **零位**【用户确认】
@@ -85,7 +87,7 @@
 | SW | `E:\HuanCun\Desktop\sw_work\Bennett\Bennett_1\Bennett_test5.SLDASM` | 只用 `Bennett_1`；只读，走 COM API，不点界面 |
 | URDF | `bennett_rl/source/bennett_rl/bennett_rl/assets/robots/Urdf_Bennett_3/urdf/Urdf_Bennett_3.urdf` | 25 个 link，每腿多一个闭链用的 `X_3`（`_2` 的复制体，不算质量）；哈希 affac3c8841ccedb |
 | USD（**以后训练用**） | 同目录 `Urdf_Bennett_3.usd` | 21 个刚体，无 `_3`；哈希 a4a6ed72c6a287a1 |
-| USD（不再用） | `Urdf_Bennett_4/urdf/Urdf_Bennett_3.usd` | 碰撞体做过简化，已同步更新质量惯量；哈希 8a01726eb20cfd2d |
+| USD（不再用） | `Urdf_Bennett_4/urdf/Urdf_Bennett_3.usd` | 碰撞体做过简化（仿真速度约为 `_3` 的 2.8 倍，2048 环境每步 38–42 ms 对 107–116 ms），已同步更新质量惯量；哈希 8a01726eb20cfd2d |
 | MuJoCo | `bennett_rl/sim2sim/models/bennett_3/bennett_3.xml`（同目录 `_genfinal.py` 生成） | 25 个刚体，总质量 11.972 kg；哈希 fe07b42372c534d3；旧 17 刚体模型在 `bennett_3_wuzuduan/`，`bennett_1/` 是 base 仍 4.22 的旧版 |
 
 **闭链处理**【已确认】
@@ -109,6 +111,8 @@
 - 任务：`quad_leg_trot`（trot1、trot-motor-ab）、`quad_leg_free_gait`（1 到 4）、`quad_leg_go2`（7、8、10、11、12、13、slope1）、`quad_leg_gravel`、`quad_leg_slope`、`quad_leg_stair`、`quad_leg_standing_1/2`、`quad_leg_track`、`single_leg_rr_trace`、`single_leg_rr_jct` 等。
 - **USD 指向**：`BENNETT_CFG_V6`（指向 `_4`）被 trot1、go2-11/12/13、go2-slope1、gravel1、slope3/4、stair1 使用；`go2-8`、`go2-10`、`single_leg_rr_jct` 用 `_3`。用户决定以后都用 `_3`，要训练时再改配置；`_3` 的碰撞体未简化，训练可能变慢。
 - 历史问题：free_gait4 把抬腿高度加倍后训练崩溃（std 出现负值），效果差；抬腿高度一直难调。
+- **bennett_1（2026-10-16 起的新训练任务，仅仿真）**【已确认】：观测先加噪声再做 12 Hz 低通（与部署端一致）。其爬行变体（go2-10 式相位时钟，观测 50 维）训出的 D4，在 Isaac 与 MuJoCo 里都能稳定前进、后退、侧移、转向，四脚各抬 31–55 mm，对 0–100 ms 的观测滞后仍稳（120 ms 失效）；训练用 `_4` 的 USD，D4 与 T9 在 `_3` 下也验证过能走。在 D4 上加横向速度项续训得到的 E2，Isaac 中侧移速度比由 0.63–0.90 升到 0.75–1.07，步态与抗延迟不变（K57）。MuJoCo 中后退、侧移的速度对地面摩擦敏感（摩擦 ×1.6 时降到指令的 0.4–0.65，K58），真机地面摩擦未测。详见 `bennett_rl/README.md` 的 K53、K54、K56–K58。**尚未上真机。**
+- go2-10 在真机上前进步态很好、迁移准确；缺点是后退差、转向难操作、加速度大、走路砰砰、抬腿快【用户确认，2026-10-16；真机效果未独立验证】。仿真数据印证了抬腿快与落地冲击大（抬腿最大上升速度 0.65–1.04 m/s，落地前下降速度 0.37–0.67 m/s），后退、侧移、转向只能达到指令的 0.6–0.7。
 - 域随机化范围**一律待定，不给具体数值**，后续再分析。候选项：base 质量、腿部杆件质量、base 质心、惯量、关节零位偏置。
 
 **sim2sim（MuJoCo）**：`bennett_rl/sim2sim/sim2sim.py --task <名> --endpoint_trail`；用户验证 sim2sim 没问题。
@@ -119,6 +123,7 @@
 - 运行时 `quad_leg_xu/bennett_deploy/`（`runtime.py`、`dm_can.py`、`contract.py`、`imu.py` 等）；根目录 `damiao.py` 等是早期脚本，只加载官方 DLL。
 - 主循环：命令 1 kHz，策略 50 Hz；起动状态机：回默认姿态 → 预热 → 等待授权 → 策略。
 - 关节速度与 IMU 各加 12 Hz 一阶低通（训练里没有对应滤波）。
+- bennett_1 爬行变体的观测是 50 维，前 33 维同上，末 17 维是相位信息：全局相位 sin/cos（2）、各腿相位 sin/cos（8，每条腿的 sin 与 cos 相邻）、应着地标志（4）、步态参数（3：0.55 Hz、占空比 0.78、摆动高度 0.045）；相位 =（策略启动后的时间 × 0.55 Hz）取小数部分，指令为零时全部取站立值；腿序 FL→RR→FR→RL。部署端要照此生成，参考 `bennett_rl/sim2sim/configs/bennett_1_crawl.py` 与 `sim2sim/sim2sim.py` 的 crawl 模式。【已确认训练与 sim2sim 的实现，未部署】
 - `--dm_sdk_profile low_latency` 选补丁版 DLL；`quad_leg_trot1_deploy.py` 没传这个参数，默认走官方版（109 ms 批量）。
 - 软件力矩限 `--software_effort_limit_nm` 默认 0（关闭）；训练限 8 N·m，固件 TMAX 20。
 - `sim_to_motor` 符号：`3_quad_leg_track.py` 里 FL、RL 的 thigh 为 −1（实机验证过），`bennett_deploy/contract.py` 里是 +1，冲突。
@@ -134,6 +139,8 @@
 5. 样机零位肉眼标定，误差未量化。
 6. 旧系统辨识数据（2026-09-16、09-17）用的是官方 DLL，只作线索，不进新数据集。
 7. 旧辨识结论里"传输延迟约 0.0–0.2 ms"是被批量交付骗了的结果。
+8. bennett_1 爬行变体对观测滞后敏感：D4 在 100 ms 以内稳，120 ms 时会摔；官方动态库的批量交付最坏约 109 ms（动作延迟另算，训练里还没有）。
+9. bennett_1 爬行变体的后退、侧移速度对地面摩擦敏感（仿真中摩擦越大速度越低），真机地面摩擦未测，实际速度可能低于指令（`bennett_rl/README.md` K58、T34）。
 
 ## 9. 系统辨识
 
@@ -157,7 +164,7 @@
 | 内容 | 路径 |
 |---|---|
 | 本文件 | `E:\HuanCun\Desktop\u2canfd\docs\ROBOT.md` |
-| 00 号包（最详细，含质量表、闭链、哈希） | `E:\HuanCun\Desktop\u2canfd\System_Identification\workstreams\00_model_chain_sw_urdf_usd\README.md` |
+| 系统辨识各工作包进展（总览表 + 每包一节；00 号包最详细，含质量表、闭链、哈希） | `E:\HuanCun\Desktop\u2canfd\README.md` |
 | 系统辨识总计划 | `E:\HuanCun\Desktop\u2canfd\System_Identification\Plan.md` |
 | 排查记录（通信、寄存器、训练配置） | `E:\HuanCun\Desktop\u2canfd\System_Identification\docs\AUDIT_v0.md`、`BASELINE_AUDIT.md` |
 | 训练代码 | `E:\Project\Isaaclab\bennett_rl`（`SIM2REAL_PIPELINE.md` 是 sim2real 全流程清单） |

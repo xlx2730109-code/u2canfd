@@ -6,7 +6,7 @@
 
 | 编号 | 中文作用 | 状态 | 下一步要得到什么 |
 |---:|---|---|---|
-| 00 | [模型链校核 SW→URDF→USD→MuJoCo + 真机称重](00_model_chain_sw_urdf_usd/README.md) | **第一步，必做** | 逐 link 质量/质心/惯量对表；整机实测 |
+| 00 | [模型链校核 SW→URDF→USD→MuJoCo + 真机称重](../../README.md) | **第一步，必做** | 逐 link 质量/质心/惯量对表；整机实测 |
 | 01 | [查清硬件和固件](01_hardware_inventory/README.md) | 已有 9-16 寄存器快照，需复核 | `TIMEOUT`、`OC_Value`、`KT_Value` 等含义 |
 | 02 | [测通信、周期和延迟](02_timing_latency/README.md) | **必做** | 低延迟补丁版和 Linux `.so` 的实测延迟 |
 | 03 | [关节零位标定](03_joint_zero_calibration/README.md) | 必做（只做零位） | 8 个关节的零位偏差 δq |
