@@ -12,13 +12,16 @@ the command line to add/override, e.g.:
 import sys
 from pathlib import Path
 
-from bennett_deploy.paths import bennett_path
+from bennett_deploy.paths import bennett_path, local_policy
 from bennett_deploy.runtime import main
 
 FREE_GAIT_GLOB = Path(bennett_path("logs", "rsl_rl", "quad_leg_free_gait", "quad_leg_free_gait3", "flat"))
 
 
 def _newest_free_gait_policy() -> Path:
+    bundled = local_policy("free_gait3")  # sim2real/policies/free_gait3，不依赖 bennett_rl
+    if bundled:
+        return Path(bundled)
     # Path.glob does not expand wildcards in the *base* path, so the wildcard
     # must appear in the pattern string, not in the base Path.
     candidates = sorted(FREE_GAIT_GLOB.glob("*/exported/policy.pt"), key=lambda p: p.stat().st_mtime, reverse=True)

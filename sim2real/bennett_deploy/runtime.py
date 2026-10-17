@@ -19,12 +19,12 @@ from .contract import DeploymentContract, training_obs_lowpass_hz
 from .gait import crawl_phase_terms
 from .imu import DMImuSerialReader, FirstOrderLowPass, projected_gravity_from_rpy_deg
 from .input import KeyboardCommandVelocity
-from .paths import bennett_path
+from .paths import resolve_policy
 from .policy import PolicyPipeline
 
 
-DEFAULT_POLICY = bennett_path(
-    "logs", "rsl_rl", "quad_leg_go2", "quad_leg_go2-10", "flat", "2026-07-19_18-41-26", "exported", "policy.pt"
+DEFAULT_POLICY = resolve_policy(
+    "go2-10", "quad_leg_go2", "quad_leg_go2-10", "flat", "2026-07-19_18-41-26", "exported", "policy.pt"
 )
 # DM-IMU 的缺省串口：Windows 为 COM6；Linux 为 /dev/ttyACM0（推测，以实际枚举为准，用 --imu_port 覆盖）
 DEFAULT_IMU_PORT = "COM6" if sys.platform == "win32" else "/dev/ttyACM0"

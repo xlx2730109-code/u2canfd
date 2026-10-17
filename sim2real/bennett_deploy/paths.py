@@ -28,3 +28,25 @@ def bennett_root() -> Path:
 
 def bennett_path(*parts: str) -> str:
     return str(bennett_root().joinpath(*parts))
+
+
+POLICY_DIR = Path(__file__).resolve().parents[1] / "policies"
+
+
+def local_policy(name: str) -> str | None:
+    """Path of ``sim2real/policies/<name>/exported/policy.pt`` if that bundled copy exists."""
+    path = POLICY_DIR / name / "exported" / "policy.pt"
+    return str(path) if path.is_file() else None
+
+
+def resolve_policy(local_name: str | None, *repo_parts: str) -> str:
+    """Bundled policy copy first; otherwise ``bennett_rl/logs/rsl_rl/<repo_parts>``.
+
+    A bundled copy is a run directory reduced to ``exported/policy.pt``, ``params/env.yaml`` and
+    ``params/agent.yaml``, so deployment needs no bennett_rl checkout.
+    """
+    if local_name:
+        local = local_policy(local_name)
+        if local:
+            return local
+    return bennett_path("logs", "rsl_rl", *repo_parts)

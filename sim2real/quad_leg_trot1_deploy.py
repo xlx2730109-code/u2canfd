@@ -11,10 +11,12 @@ add/override, e.g.:
 
 import sys
 
-from bennett_deploy.paths import bennett_path
+from bennett_deploy.paths import resolve_policy
 from bennett_deploy.runtime import main
 
-TROT1_POLICY = bennett_path("logs", "rsl_rl", "quad_leg_trot", "quad_leg_trot1", "flat", "2026-07-27_20-08-08", "exported")
+TROT1_POLICY = resolve_policy(
+    "trot1", "quad_leg_trot", "quad_leg_trot1", "flat", "2026-07-27_20-08-08", "exported", "policy.pt"
+)
 
 
 if __name__ == "__main__":

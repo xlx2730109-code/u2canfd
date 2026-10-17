@@ -15,7 +15,7 @@ command line, e.g.:
 import sys
 from pathlib import Path
 
-from bennett_deploy.paths import bennett_path
+from bennett_deploy.paths import bennett_path, local_policy
 from bennett_deploy.runtime import main
 
 # free_gait4 first, then free_gait3 (obs-identical) as a fallback. The wildcard
@@ -34,6 +34,9 @@ def _newest_free_gait_policy() -> Path:
         reverse=True,
     )
     if not candidates:
+        bundled = local_policy("free_gait3")  # sim2real/policies/free_gait3，不依赖 bennett_rl
+        if bundled:
+            return Path(bundled)
         raise SystemExit(
             "No trained free-gait policy found. Train free_gait4 first, e.g.:\n"
             "  python scripts/reinforcement_learning/rsl_rl_train.py "
