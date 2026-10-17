@@ -1,12 +1,46 @@
 from __future__ import annotations
 
+import atexit
+import os
 import sys
 import threading
-from typing import Tuple
+from typing import List, Tuple
+
+
+def parse_posix_keys(data: str) -> List[Tuple[str, bool]]:
+    """Split raw POSIX terminal input into (key, extended) events.
+
+    The result uses the same key names as the Windows ``msvcrt`` path: PageUp,
+    PageDown and Home become the extended keys ``I``, ``Q`` and ``G``; a lone
+    ESC is a plain ``\x1b`` (shutdown); other escape sequences (arrows, ...)
+    are ignored; ``\n`` is mapped to ``\r`` (arm).
+    """
+
+    events: List[Tuple[str, bool]] = []
+    index, size = 0, len(data)
+    while index < size:
+        char = data[index]
+        if char == "\x1b":
+            if index + 1 < size and data[index + 1] in "[O":
+                end = index + 2
+                while end < size and not 0x40 <= ord(data[end]) <= 0x7E:
+                    end += 1
+                sequence = data[index + 2:end + 1]
+                index = end + 1
+                mapped = {"5~": "I", "6~": "Q", "H": "G", "1~": "G"}.get(sequence)
+                if mapped is not None:
+                    events.append((mapped, True))
+                continue
+            events.append(("\x1b", False))
+            index += 1
+            continue
+        events.append(("\r" if char == "\n" else char, False))
+        index += 1
+    return events
 
 
 class KeyboardCommandVelocity:
-    """Non-blocking Windows keyboard velocity command and policy arm control."""
+    """Non-blocking keyboard velocity command and policy arm control (Windows msvcrt, POSIX termios)."""
 
     def __init__(
         self,
@@ -52,6 +86,33 @@ class KeyboardCommandVelocity:
             raise ValueError("initial_x must be zero or have magnitude >= min_nonzero_x")
         self.command_y = max(self.min_y, min(self.max_y, self.command_y))
         self.command_yaw = max(self.min_yaw, min(self.max_yaw, self.command_yaw))
+        self._posix_fd = None
+        self._posix_saved = None
+        if os.name == "posix":
+            self._setup_posix_terminal()
+
+    def _setup_posix_terminal(self) -> None:
+        """Put stdin in cbreak mode (no echo, no line buffering); Ctrl-C still works."""
+        if not sys.stdin.isatty():
+            print("[KEYBOARD] stdin is not a terminal; keyboard commands are disabled", file=sys.stderr)
+            return
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        self._posix_saved = termios.tcgetattr(fd)
+        tty.setcbreak(fd)
+        self._posix_fd = fd
+        atexit.register(self.close)
+
+    def close(self) -> None:
+        """Restore the terminal settings changed by the POSIX keyboard path."""
+        if self._posix_fd is not None and self._posix_saved is not None:
+            import termios
+
+            termios.tcsetattr(self._posix_fd, termios.TCSADRAIN, self._posix_saved)
+        self._posix_fd = None
+        self._posix_saved = None
 
     def _print(self) -> None:
         print(
@@ -135,8 +196,28 @@ class KeyboardCommandVelocity:
             print("[KEYBOARD] shutdown requested")
             self.stop_event.set()
 
+    def _poll_posix(self) -> None:
+        if self._posix_fd is None:
+            return
+        import select
+
+        data = ""
+        try:
+            while select.select([self._posix_fd], [], [], 0)[0]:
+                chunk = os.read(self._posix_fd, 64)
+                if not chunk:
+                    break
+                data += chunk.decode("utf-8", "ignore")
+        except Exception as exc:
+            print(f"[KEYBOARD] polling disabled after error: {exc}", file=sys.stderr)
+            self._posix_fd = None
+            return
+        for key, extended in parse_posix_keys(data):
+            self._apply_key(key, extended=extended)
+
     def poll(self) -> Tuple[float, float, float]:
         if sys.platform != "win32":
+            self._poll_posix()
             return self.command_x, self.command_y, self.command_yaw
         try:
             import msvcrt

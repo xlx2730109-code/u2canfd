@@ -15,14 +15,19 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from .async_csv import AsyncCsvLogger
-from .contract import DeploymentContract
+from .contract import DeploymentContract, training_obs_lowpass_hz
 from .gait import crawl_phase_terms
 from .imu import DMImuSerialReader, FirstOrderLowPass, projected_gravity_from_rpy_deg
 from .input import KeyboardCommandVelocity
+from .paths import bennett_path
 from .policy import PolicyPipeline
 
 
-DEFAULT_POLICY = r"E:\Project\Isaaclab\bennett_rl\logs\rsl_rl\quad_leg_go2\quad_leg_go2-10\flat\2026-07-19_18-41-26\exported\policy.pt"
+DEFAULT_POLICY = bennett_path(
+    "logs", "rsl_rl", "quad_leg_go2", "quad_leg_go2-10", "flat", "2026-07-19_18-41-26", "exported", "policy.pt"
+)
+# DM-IMU 的缺省串口：Windows 为 COM6；Linux 为 /dev/ttyACM0（推测，以实际枚举为准，用 --imu_port 覆盖）
+DEFAULT_IMU_PORT = "COM6" if sys.platform == "win32" else "/dev/ttyACM0"
 
 DM_SDK_PROFILE_ENV = "BENNETT_DM_SDK_PROFILE"
 DM_SDK_PROFILES = {
@@ -37,6 +42,8 @@ DM_SDK_PROFILES = {
 def _verify_dm_sdk_profile(profile: str) -> tuple[Path | None, str | None]:
     """Resolve and verify the selected Windows SDK without opening USB/CAN."""
     if sys.platform != "win32":
+        if profile != "original":
+            raise RuntimeError(f"DM SDK profile {profile!r} has no Linux build; use --dm_sdk_profile original")
         return None, None
     directory_name, expected_sha256 = DM_SDK_PROFILES[profile]
     root_dir = Path(__file__).resolve().parents[1] / "sdk"  # 动态库放在 sim2real/sdk
@@ -139,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="original",
         help="Windows DM SDK profile; Go2-11 selects the verified low_latency profile by default",
     )
-    parser.add_argument("--imu_port", default="COM6")
+    parser.add_argument("--imu_port", default=DEFAULT_IMU_PORT)
     parser.add_argument("--imu_baudrate", type=int, default=921600)
     parser.add_argument(
         "--output_scale",
@@ -377,6 +384,7 @@ class DeploymentRunner:
             obs_tail = "crawl_phase/crawl_leg_phase(2/8), desired_contacts(4), gait_params(3)"
         print("[OBS] base_ang_vel(3), projected_gravity(3), velocity_command(3), joint_pos_rel(8), "
               f"joint_vel_rel(8), last_action(8), {obs_tail}")
+        self._print_obs_filter_check()
         print("[JOINT-ORDER] " + ", ".join(self.contract.joint_order))
         print(
             "[TRAIN-DEFAULT] "
@@ -401,6 +409,25 @@ class DeploymentRunner:
             "(train_default + clipped_policy_action * action_scale * output_scale), "
             "then optional live-feedback MIT-PD effort limiting"
         )
+
+    def _print_obs_filter_check(self) -> None:
+        """Compare the training observation low-pass cutoffs with the runtime filters."""
+        training = training_obs_lowpass_hz(self.contract.env_yaml)
+        if not training:
+            return
+        runtime = {
+            "base_ang_vel": self.args.imu_cutoff_hz,
+            "projected_gravity": self.args.imu_cutoff_hz,
+            "joint_pos": 0.0,
+            "joint_vel": self.args.joint_vel_cutoff_hz,
+        }
+        print("[OBS-FILTER] training cutoff Hz: " + ", ".join(f"{name}={value:g}" for name, value in training.items()))
+        for name, value in training.items():
+            if abs(value - runtime[name]) > 1e-9:
+                print(
+                    f"[OBS-FILTER] warning: {name} trained with {value:g} Hz but runtime uses {runtime[name]:g} Hz",
+                    file=sys.stderr,
+                )
 
     def preflight(self) -> dict[str, float]:
         result = self.pipeline.preflight()
@@ -782,6 +809,8 @@ class DeploymentRunner:
 
     def close(self) -> None:
         errors = []
+        if self.keyboard is not None:
+            self.keyboard.close()
         if self.bus is not None:
             try:
                 self.bus.close()

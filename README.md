@@ -7,6 +7,7 @@
 | 00 模型链校核 | SW → URDF → USD → MuJoCo 与整机称重对齐 | 已收尾（2026-10-15） |
 | 02 通信、周期、延迟 | 测反馈周期与延迟 | 下一个 |
 | 01、03、05、06、07、08、11 | 硬件清查、零位、电机曲线、数据记录、执行器、传感器、训练部署 | 未开始，开始时在本文件新增一节 |
+| sim2real 部署 | 部署运行库、动态库、工具与 bennett_1 的策略入口（Windows、Linux） | 进行中（2026-10-17）：T9、S1 入口已写好，待真机试验 |
 
 # System_Identification/workstreams/00_model_chain_sw_urdf_usd
 
@@ -259,3 +260,128 @@ SW 质量覆盖的 7 种零件：
 - [ ]  T14 训练域随机化（只记不做）：按 H 的项目，范围后续再分析；需要改训练配置，用户要做时再提。
 - [ ]  T15 训练配置改用 `Urdf_Bennett_3` 的 USD（只记不做）：现在指向 `Urdf_Bennett_4` 的任务有 `trot1`、`go2-11/12/13`、`go2-slope1`、`gravel1`、`slope3/4`、`stair1`；注意 `_4` 的碰撞体做过简化，换成 `_3` 后训练速度可能变慢。
   改模型的流程：改 URDF → 重新生成 USD 与 MJCF → 再对表；MuJoCo 的改动先在副本上做，并做动态验证。
+
+
+
+---
+
+
+# sim2real
+
+目标：把 Isaac Lab 训出的策略部署到 Bennett 真机（达妙电机 + DM-IMU），Windows 与 Linux（Jetson）通用。本文件夹汇集部署运行库、动态库与工具，原位置的文件保留不动。
+
+## 基准与结论
+
+### A. 命令
+
+在 `sim2real/` 下运行。**`--check_only` 与 `--dry_run` 不使能电机、不发运动命令；去掉它们就会连接并驱动真机，须用户当次明确同意。**
+
+```
+python bennett_1_crawl_deploy.py --check_only
+python bennett_1_crawl_deploy.py --dry_run --keyboard
+python bennett_1_free_deploy.py --check_only
+python tools/dev_sn.py
+```
+
+- `bennett_1_crawl_deploy.py`：bennett_1 爬行变体，缺省策略 T9，与 sim2sim 配置 `bennett_1_crawl` 一致。
+- `bennett_1_free_deploy.py`：bennett_1 自由步态，缺省策略 S1，与 sim2sim 配置 `bennett_1_free` 一致。
+- 换策略：环境变量 `BENNETT1_CRAWL_RUN`、`BENNETT1_FREE_RUN`（运行目录名），或 `--policy <exported/policy.pt>`；运行目录须含 `params/env.yaml`、`params/agent.yaml`、`exported/policy.pt`。
+- 键盘：`w`/`s` 前后，`a`/`d` 侧移，`j`/`l` 转向，`0`/`x` 清零，空格或回车授权策略，`q` 或 Esc 退出；键盘指令范围缺省取各策略的训练范围。
+- `--check_only`：只校验训练配置与 TorchScript 策略，不打开 IMU 与电机。
+- `--dry_run`：读 IMU、跑策略，不打开电机。
+- 训练仓库定位：环境变量 `BENNETT_RL_ROOT`，否则取同级目录 `bennett_rl`，再否则取本仓库所在盘符下的 `Project/Isaaclab/bennett_rl`。
+- Linux 的 IMU 串口缺省为 `/dev/ttyACM0`（推测），以实际枚举为准，用 `--imu_port` 覆盖。
+
+### B. 文件夹结构
+
+```
+sim2real/
+├── bennett_deploy/                运行库
+│   ├── __init__.py                导出契约类
+│   ├── async_csv.py               异步 CSV 日志
+│   ├── contract.py                go2-10 与 bennett_1 爬行的 50 维部署契约：校验 env.yaml、关节表与符号、动作缩放
+│   ├── dm_can.py                  达妙电机 CAN 通信与 MIT 控制
+│   ├── free_gait_contract.py      自由步态（33 维）契约
+│   ├── free_gait_policy.py        自由步态观测与推理
+│   ├── gait.py                    爬行相位时钟
+│   ├── imu.py                     DM-IMU 串口读取与一阶低通
+│   ├── input.py                   键盘速度指令（Windows 用 msvcrt，Linux 用 termios）
+│   ├── paths.py                   训练仓库路径解析
+│   ├── policy.py                  50 维观测拼装与策略推理
+│   ├── runtime.py                 主程序：参数、安全启动、1 kHz 控制环、50 Hz 策略
+│   ├── tests.py                   部署核心单元测试
+│   ├── trot1_contract.py          trot1 契约
+│   ├── trot1_gait.py              trot1 步态时钟
+│   └── trot1_policy.py            trot1 观测与推理
+├── docs/
+│   └── WORKFLOW.md                达妙 USB-CANFD Python 例程说明（安装与 Ubuntu 环境）
+├── sdk/                           达妙动态库
+│   ├── dlls/                      官方版（反馈每约 109 ms 一批）与 Linux `.so`
+│   ├── dlls_lowlatency/           补丁版（批量延迟改为 1 ms，真实延迟未测，无 Linux 版）
+│   └── libusb-1.0.dll
+├── tools/
+│   ├── 0_Return_to_zero.py        8 电机限速安全回零
+│   └── dev_sn.py                  列出 USB-CANFD 设备
+├── bennett_1_crawl_deploy.py      bennett_1 爬行变体入口（缺省 T9）
+├── bennett_1_free_deploy.py       bennett_1 自由步态入口（缺省 S1）
+├── quad_leg_free_gait3_deploy.py  自由步态 gait3 入口
+├── quad_leg_free_gait4_deploy.py  自由步态 gait4 入口
+├── quad_leg_go2-10_deploy.py      go2-10 入口（缺省策略）
+├── quad_leg_trot1_deploy.py       trot1 入口
+└── README.md                      本文件
+```
+
+### C. 迁移对照
+
+| 来源（`u2canfd/` 下） | 去向 | 说明 |
+| --- | --- | --- |
+| `quad_leg_xu/bennett_deploy/` | `bennett_deploy/` | 复制后有改动，见 D |
+| `quad_leg_xu/quad_leg_*_deploy.py`（4 个） | 同名，位于本文件夹根 | 只把写死的路径改为 `bennett_path(...)` |
+| `dlls/`、`dlls_lowlatency/`、`libusb-1.0.dll` | `sdk/` | 无改动，`libdm_device.dll` 与原件逐字节相同 |
+| `0_Return_to_zero.py` | `tools/` | 动态库目录改为 `sdk/` |
+| `dev_sn.py` | `tools/` | 无改动 |
+| `WORKFLOW.md` | `docs/` | 无改动 |
+| 新写 | `bennett_1_crawl_deploy.py`、`bennett_1_free_deploy.py` | bennett_1 的 T9、S1 入口 |
+
+### D. 相对原件的改动
+
+| 文件 | 改动 |
+| --- | --- |
+| `runtime.py` | 动态库目录改为 `sdk/`；缺省策略路径改用 `bennett_path`；IMU 缺省串口按平台取值；Linux 上选 `low_latency` 报错；打印训练与运行时的观测低通对比；退出时恢复终端 |
+| `dm_can.py` | 动态库目录改为 `sdk/`；Linux 上把 dmcan 的后端库绑定到 `sdk/dlls/libdm_device.so`，不再依赖启动目录 |
+| `contract.py`、`free_gait_contract.py` | 关节位置、速度观测同时接受官方函数与 bennett_1 的 `filtered_observation` 包装（内层函数仍须相同） |
+| `input.py` | 新增 Linux 键盘读取（termios，按键与 Windows 一致）；`parse_posix_keys` 可单测 |
+| `paths.py` | 不再写死盘符：环境变量、同级目录、本仓库所在盘符三级查找 |
+| `tests.py` | 新增 3 个键盘解析测试；读取不存在的旧脚本的测试改为跳过 |
+| 关节符号表 `sim_to_motor` | 未改动 |
+
+### E. 未迁移（原处保留）
+
+| 内容 | 位置 | 原因 |
+| --- | --- | --- |
+| 早期单腿、四足试验脚本 | 根目录 `1_`、`2_`、`3_`、`4_`、`5_*.py`、`damiao.py`、`damiao_2.py`、`single_leg_policy_udp_runner_2.py` | 已被 `bennett_deploy` 取代 |
+| 各策略独立部署脚本 | `quad_leg_xu/quad_leg_go2-*.py`、`quad_leg_crawl*.py`、`quad_leg_walk.py`、`quad_leg_trot/`、`quad_leg_free_gait/` | 早期版本，go2-10 之后统一走 `bennett_deploy` |
+| DLL 测试、辨识输出、日志 | `_dlltest/`、`sysid_out/`、`logs/`，以及 `quad_leg_xu/*/logs/` | 数据与测试产物，不是部署代码 |
+
+### F. 结论
+
+- sim2real-K1：迁移与修改后验证（均不打开 IMU 与电机）：6 个入口的 `--check_only` 全部通过；`bennett_deploy.tests` 共 12 个测试，11 个通过、1 个跳过（旧脚本不存在）；动态库解析到 `sim2real/sdk/dlls`，哈希一致。
+- sim2real-K2：bennett_1 的观测与训练端逐项一致（读代码对照）：50 维顺序、相位 = 回合时间 × 0.55 Hz 取小数、腿序偏移 (0, 0.5, 0.75, 0.25)、占空比 0.78、指令范数小于 0.025 时取站立值（相位 0、四脚着地、参数 0/1/0）；动作缩放 0.2，裁剪 3.5，kp 28，kd 2；角速度、重力、关节速度的 12 Hz 低通与训练一致（运行时会打印对比），关节位置不滤波。
+- sim2real-K3：关节符号表 `sim_to_motor` 沿用原文件（FR_calf、RR_calf 为 −1，其余 +1），不改动。`free_gait_contract.py` 的注释记载：FL、RL 的 thigh 取 +1 在实机验证过（2026-09-05），`3_quad_leg_track.py` 的 −1 会使步态镜像、不适用于腿部策略；入口已由用户验证。
+- sim2real-K4：训练配置差异：go2-10 的执行器为力矩限 7 N·m、饱和 12 N·m、速度限 30 rad/s，bennett_1 为 8、20、20。
+- sim2real-K5：缺省策略的已知性质（来自 `bennett_rl/README.md`）：T9 训练时没有加反馈滞后，滞后 80 ms 开始变差、100 ms 失效；官方动态库的反馈约 109 ms 一批，所以用 T9 时建议用补丁版（Windows，`--dm_sdk_profile low_latency`），或换 D4（K54）。S1 前进时四脚抬高 27–41 mm，两脚同时着地约占 20%（K53）。
+- sim2real-K6：Linux 部分只做了静态检查与键盘解析单测，未在 Linux 上运行：`.so` 绑定、termios 键盘、串口名、`low_latency` 无 Linux 版。
+- sim2real-K7：`dm_sdk_profile` 缺省为 `original`（官方版）；补丁版的真实延迟未测。
+
+## 已完成
+
+- [X]  2026-10-16 建 `sim2real/`，复制部署运行库、入口、动态库、工具与文档，改动动态库路径并验证（sim2real-K1）。
+- [X]  2026-10-17 写死的 `E:\` 路径改为跨平台解析；加 Linux 键盘与 `.so` 绑定；放宽契约校验（见 D）。
+- [X]  2026-10-17 新增 bennett_1 的 T9、S1 入口并通过 `--check_only`（sim2real-K1、K2）。
+
+## 待完成
+
+- [ ]  sim2real-T1：用户在真机上试 `bennett_1_crawl_deploy.py`（T9）与 `bennett_1_free_deploy.py`（S1），结果记入本节；首次上电按用户的流程，须当次明确同意。
+- [ ]  sim2real-T2：在 Linux（Jetson）上跑 `--check_only`、`--dry_run`，确认 `.so` 绑定、键盘、IMU 串口名（sim2real-K6）。
+- [ ]  sim2real-T3：官方动态库下 T9 对约 109 ms 滞后不稳，真机若出现迟钝或摔倒，改用补丁版或 D4（sim2real-K5）。
+- [ ]  sim2real-T4：用户确认文件夹结构后，决定原位置文件是否删除。

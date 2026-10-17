@@ -28,6 +28,7 @@ from typing import Iterable
 
 from .contract import (
     JOINT_ORDER,
+    check_joint_observation_function,
     JointSpec,
     _consistent_under,
     _required,
@@ -139,8 +140,7 @@ class FreeGaitDeploymentContract:
             ("joint_vel", "isaaclab.envs.mdp.observations:joint_vel_rel"),
         ):
             prefix = f"observations.policy.{term}"
-            if _required(env, prefix + ".func", str) != function:
-                raise ValueError(f"unsupported {term} observation function")
+            check_joint_observation_function(env, term, function)
             observed_names = tuple(_required(env, prefix + ".params.asset_cfg.joint_names", list))
             if observed_names != JOINT_ORDER:
                 raise ValueError(f"{term} observation joint order mismatch: {observed_names}")

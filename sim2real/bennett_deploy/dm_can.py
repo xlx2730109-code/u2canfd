@@ -24,8 +24,10 @@ if sys.platform == "linux" and "CONDA_PREFIX" in os.environ:
         except Exception as e:
             print(f"Warning: Failed to preload conda libusb: {e}")
 
+_SDK_DIR = Path(__file__).resolve().parents[1] / "sdk"  # 动态库放在 sim2real/sdk
+
 if sys.platform == "win32":
-    root_dir = Path(__file__).resolve().parents[1] / "sdk"  # 动态库放在 sim2real/sdk
+    root_dir = _SDK_DIR
     _dm_sdk_profiles = {
         "original": ("dlls", "DB7FC43D0D60B847479DCB58CFBE13E524B0CA43C5DFA847D14E760BC0E2A8A7"),
         "low_latency": (
@@ -89,6 +91,18 @@ if sys.platform == "win32":
 
     def _selected_dm_backend_path() -> str:
         return str(_dm_dll_path)
+
+    _dmcan_context_module.find_backend_dll_path = _selected_dm_backend_path
+    DmCanContext.__init__.__globals__["find_backend_dll_path"] = _selected_dm_backend_path
+elif sys.platform == "linux":
+    # dmcan-sdk 只在包目录与当前工作目录下找 dlls/，这里绑定到 sim2real/sdk，使启动目录不受限制。
+    _dm_so_path = _SDK_DIR / "dlls" / "libdm_device.so"
+    if not _dm_so_path.is_file():
+        raise FileNotFoundError(f"dmcan shared library not found: {_dm_so_path}")
+    _dmcan_context_module = importlib.import_module("dmcan.dmcan_context")
+
+    def _selected_dm_backend_path() -> str:
+        return str(_dm_so_path)
 
     _dmcan_context_module.find_backend_dll_path = _selected_dm_backend_path
     DmCanContext.__init__.__globals__["find_backend_dll_path"] = _selected_dm_backend_path

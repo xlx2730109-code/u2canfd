@@ -135,6 +135,30 @@ def _consistent_under(nodes: Mapping[str, Any], prefix: str, leaf: str) -> float
     return first
 
 
+# bennett_1 的观测项用 filtered_observation 包一层（噪声、低通、可选滞后），内层函数仍是官方的关节观测函数。
+FILTERED_OBSERVATION_FUNC = "bennett_rl.tasks.manager_based.bennett_1.mdp.observations:filtered_observation"
+
+
+def check_joint_observation_function(env: Mapping[str, Any], term: str, function: str) -> None:
+    """Accept the plain Isaac Lab joint observation or its bennett_1 ``filtered_observation`` wrapper."""
+    prefix = f"observations.policy.{term}"
+    actual = _required(env, prefix + ".func", str)
+    if actual == FILTERED_OBSERVATION_FUNC:
+        actual = _required(env, prefix + ".params.func", str)
+    if actual != function:
+        raise ValueError(f"unsupported {term} observation function")
+
+
+def training_obs_lowpass_hz(env_yaml: Path) -> dict[str, float]:
+    """Training-side low-pass cutoffs of the ``filtered_observation`` terms (empty for plain observations)."""
+    env = parse_isaaclab_yaml(env_yaml)
+    result: dict[str, float] = {}
+    for term in ("base_ang_vel", "projected_gravity", "joint_pos", "joint_vel"):
+        if env.get(f"observations.policy.{term}.func") == FILTERED_OBSERVATION_FUNC:
+            result[term] = float(env.get(f"observations.policy.{term}.params.cutoff_hz", 0.0))
+    return result
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -231,8 +255,7 @@ class DeploymentContract:
             ("joint_vel", "isaaclab.envs.mdp.observations:joint_vel_rel"),
         ):
             prefix = f"observations.policy.{term}"
-            if _required(env, prefix + ".func", str) != function:
-                raise ValueError(f"unsupported {term} observation function")
+            check_joint_observation_function(env, term, function)
             observed_names = tuple(_required(env, prefix + ".params.asset_cfg.joint_names", list))
             if observed_names != JOINT_ORDER:
                 raise ValueError(f"{term} observation joint order mismatch: {observed_names}")

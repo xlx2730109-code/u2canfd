@@ -77,6 +77,8 @@ class DeploymentCoreTests(unittest.TestCase):
     def test_extracted_motor_classes_are_ast_identical(self) -> None:
         package_dir = Path(__file__).resolve().parent
         legacy_path = package_dir.parent / "quad_leg_go2-10.py"
+        if not legacy_path.is_file():
+            self.skipTest(f"legacy script not present: {legacy_path.name}")
         extracted_path = package_dir / "dm_can.py"
 
         def classes(path: Path):
@@ -163,3 +165,22 @@ class DeploymentCoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PosixKeyParserTests(unittest.TestCase):
+    def test_plain_keys_and_arm(self) -> None:
+        from .input import parse_posix_keys
+
+        self.assertEqual(parse_posix_keys("ws a\n"), [("w", False), ("s", False), (" ", False), ("a", False), ("\r", False)])
+
+    def test_page_keys_home_and_arrows(self) -> None:
+        from .input import parse_posix_keys
+
+        self.assertEqual(parse_posix_keys("\x1b[5~\x1b[6~\x1b[H\x1b[1~"), [("I", True), ("Q", True), ("G", True), ("G", True)])
+        self.assertEqual(parse_posix_keys("\x1b[A\x1b[B\x1bOC"), [])
+
+    def test_lone_escape_is_shutdown_and_partial_sequence_is_ignored(self) -> None:
+        from .input import parse_posix_keys
+
+        self.assertEqual(parse_posix_keys("\x1b"), [("\x1b", False)])
+        self.assertEqual(parse_posix_keys("\x1b["), [])

@@ -2,7 +2,7 @@
 
 这是用户（徐龙翔）的四足机器人的总览。**任何会话里涉及这台机器人，先读本文件全文**，再按需读各工作包 README（路径见第 11 节）。
 
-状态标记：【已确认】读文件或实测得到；【用户确认】用户亲口说明；【推测】我推断，没验证；【未知】还不知道。最后更新：2026-10-16。
+状态标记：【已确认】读文件或实测得到；【用户确认】用户亲口说明；【推测】我推断，没验证；【未知】还不知道。最后更新：2026-10-17。
 
 ## 1. 课题与目标
 
@@ -120,13 +120,13 @@
 ## 7. 真机部署
 
 代码在 `E:\HuanCun\Desktop\u2canfd`【已确认】
-- 运行时 `quad_leg_xu/bennett_deploy/`（`runtime.py`、`dm_can.py`、`contract.py`、`imu.py` 等）；根目录 `damiao.py` 等是早期脚本，只加载官方 DLL。
+- 运行时 `sim2real/bennett_deploy/`（2026-10-17 起，由 `quad_leg_xu/bennett_deploy/` 迁入，原位置保留；`runtime.py`、`dm_can.py`、`contract.py`、`imu.py` 等），入口 `sim2real/*_deploy.py`，动态库 `sim2real/sdk/`，Windows 与 Linux 通用（Linux 未实测）；根目录 `damiao.py` 等是早期脚本，只加载官方 DLL。
 - 主循环：命令 1 kHz，策略 50 Hz；起动状态机：回默认姿态 → 预热 → 等待授权 → 策略。
 - 关节速度与 IMU 各加 12 Hz 一阶低通（训练里没有对应滤波）。
-- bennett_1 爬行变体的观测是 50 维，前 33 维同上，末 17 维是相位信息：全局相位 sin/cos（2）、各腿相位 sin/cos（8，每条腿的 sin 与 cos 相邻）、应着地标志（4）、步态参数（3：0.55 Hz、占空比 0.78、摆动高度 0.045）；相位 =（策略启动后的时间 × 0.55 Hz）取小数部分，指令为零时全部取站立值；腿序 FL→RR→FR→RL。部署端要照此生成，参考 `bennett_rl/sim2sim/configs/bennett_1_crawl.py` 与 `sim2sim/sim2sim.py` 的 crawl 模式。【已确认训练与 sim2sim 的实现，未部署】
+- bennett_1 爬行变体的观测是 50 维，前 33 维同上，末 17 维是相位信息：全局相位 sin/cos（2）、各腿相位 sin/cos（8，每条腿的 sin 与 cos 相邻）、应着地标志（4）、步态参数（3：0.55 Hz、占空比 0.78、摆动高度 0.045）；相位 =（策略启动后的时间 × 0.55 Hz）取小数部分，指令为零时全部取站立值；腿序 FL→RR→FR→RL。部署端要照此生成，参考 `bennett_rl/sim2sim/configs/bennett_1_crawl.py` 与 `sim2sim/sim2sim.py` 的 crawl 模式。【已确认训练与 sim2sim 的实现，未部署】 入口已写：`sim2real/bennett_1_crawl_deploy.py`（缺省 T9）、`bennett_1_free_deploy.py`（缺省 S1），`--check_only` 通过，尚未上真机；T9 训练时无反馈滞后，官方动态库（约 109 ms）下可能不稳。
 - `--dm_sdk_profile low_latency` 选补丁版 DLL；`quad_leg_trot1_deploy.py` 没传这个参数，默认走官方版（109 ms 批量）。
 - 软件力矩限 `--software_effort_limit_nm` 默认 0（关闭）；训练限 8 N·m，固件 TMAX 20。
-- `sim_to_motor` 符号：`3_quad_leg_track.py` 里 FL、RL 的 thigh 为 −1（实机验证过），`bennett_deploy/contract.py` 里是 +1，冲突。
+- `sim_to_motor` 符号【已确认，代码注释与用户确认入口已验证】：腿部策略沿用 `bennett_deploy` 的表（FL、RL 的 thigh 为 +1，FR_calf、RR_calf 为 −1）；`free_gait_contract.py` 注释记载 +1 在实机验证过（2026-09-05），`3_quad_leg_track.py` 里的 −1 会使步态镜像、不适用于腿部策略。不改动。
 - `技术文档_1.md` 里"关节指令乘 6"已被实测推翻。
 - 反馈超时默认 0.5 s，对 109 ms 批量交付不会触发，等于没有保护。
 
@@ -168,7 +168,7 @@
 | 系统辨识总计划 | `E:\HuanCun\Desktop\u2canfd\System_Identification\Plan.md` |
 | 排查记录（通信、寄存器、训练配置） | `E:\HuanCun\Desktop\u2canfd\System_Identification\docs\AUDIT_v0.md`、`BASELINE_AUDIT.md` |
 | 训练代码 | `E:\Project\Isaaclab\bennett_rl`（`SIM2REAL_PIPELINE.md` 是 sim2real 全流程清单） |
-| 部署代码 | `E:\HuanCun\Desktop\u2canfd\quad_leg_xu\bennett_deploy\` |
+| 部署代码 | `E:\HuanCun\Desktop\u2canfd\sim2real\`（`quad_leg_xu\` 为迁移前的原位置，保留） |
 | 开题材料 | `E:\HuanCun\Desktop\徐龙翔\归档\开题\`（最终版 `材料_提交\20260917_徐龙翔-开题报告.docx`；配图 `材料_配图、视频、Gif\`） |
 | 工作区临时文件 | `E:\HuanCun\AI_tmp\Claude\` |
 
