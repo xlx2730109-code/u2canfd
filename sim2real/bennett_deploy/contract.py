@@ -136,14 +136,24 @@ def _consistent_under(nodes: Mapping[str, Any], prefix: str, leaf: str) -> float
 
 
 # bennett_1 的观测项用 filtered_observation 包一层（噪声、低通、可选滞后），内层函数仍是官方的关节观测函数。
-FILTERED_OBSERVATION_FUNC = "bennett_rl.tasks.manager_based.bennett_1.mdp.observations:filtered_observation"
+# 模块路径随版本文件夹变化（bennett_1、bennett/bennett_2 等），只认前缀与函数名。
+FILTERED_OBSERVATION_PREFIX = "bennett_rl.tasks.manager_based."
+FILTERED_OBSERVATION_SUFFIX = ".mdp.observations:filtered_observation"
+
+
+def _is_filtered_observation(func: Any) -> bool:
+    return (
+        isinstance(func, str)
+        and func.startswith(FILTERED_OBSERVATION_PREFIX)
+        and func.endswith(FILTERED_OBSERVATION_SUFFIX)
+    )
 
 
 def check_joint_observation_function(env: Mapping[str, Any], term: str, function: str) -> None:
     """Accept the plain Isaac Lab joint observation or its bennett_1 ``filtered_observation`` wrapper."""
     prefix = f"observations.policy.{term}"
     actual = _required(env, prefix + ".func", str)
-    if actual == FILTERED_OBSERVATION_FUNC:
+    if _is_filtered_observation(actual):
         actual = _required(env, prefix + ".params.func", str)
     if actual != function:
         raise ValueError(f"unsupported {term} observation function")
@@ -154,7 +164,7 @@ def training_obs_lowpass_hz(env_yaml: Path) -> dict[str, float]:
     env = parse_isaaclab_yaml(env_yaml)
     result: dict[str, float] = {}
     for term in ("base_ang_vel", "projected_gravity", "joint_pos", "joint_vel"):
-        if env.get(f"observations.policy.{term}.func") == FILTERED_OBSERVATION_FUNC:
+        if _is_filtered_observation(env.get(f"observations.policy.{term}.func")):
             result[term] = float(env.get(f"observations.policy.{term}.params.cutoff_hz", 0.0))
     return result
 

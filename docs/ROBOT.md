@@ -103,15 +103,16 @@
 ## 6. 仿真与训练
 
 **Isaac Lab**（仓库 `E:\Project\Isaaclab\bennett_rl`）【已确认】
+- 训练的细节、实验记录和待办以 `bennett_rl/README.md` 为准（它是 `bennett_1` 起新训练任务的主记忆）；本节只留摘要，可能滞后。
 - 物理步长 0.005 s（200 Hz），decimation 4，策略 50 Hz；4096 并行环境，episode 20 s；PPO（rsl_rl）3000 次迭代，学习率 1e-3。
 - 执行器：`DCMotor`，kp 28、kd 2，力矩限 8 N·m、饱和 20、速度限 20 rad/s；**armature、摩擦为空，没有延迟**。
 - 动作 = 默认姿态 + 0.2 × action，按关节限位裁剪。
-- Trot1 观测 50 维：机体角速度、重力投影、速度指令、关节位置（相对默认）、关节速度、上一步动作、步态相位。观测噪声：角速度 ±0.2、重力 ±0.05、关节位置 ±0.01、关节速度 ±1.5。
-- 现有域随机化（Trot1）：执行器增益 Kp ×0.8–1.2、Kd ×0.7–1.3；摩擦 0.6–1.3；base 质量 ×0.9–1.1、base 质心 ±0.02 m；推力。**腿部杆件质量、关节摩擦、延迟、关节零位偏置都没有随机化。**
+- 旧任务 Trot1 观测 50 维：机体角速度、重力投影、速度指令、关节位置（相对默认）、关节速度、上一步动作、步态相位。观测噪声：角速度 ±0.2、重力 ±0.05、关节位置 ±0.01、关节速度 ±1.5。
+- 旧任务 Trot1 的域随机化（`bennett_1` 已另加腿部杆件质量、电枢惯量、零位偏置随机化与观测低通，见其 README）：执行器增益 Kp ×0.8–1.2、Kd ×0.7–1.3；摩擦 0.6–1.3；base 质量 ×0.9–1.1、base 质心 ±0.02 m；推力。**腿部杆件质量、关节摩擦、延迟、关节零位偏置都没有随机化。**
 - 任务：`quad_leg_trot`（trot1、trot-motor-ab）、`quad_leg_free_gait`（1 到 4）、`quad_leg_go2`（7、8、10、11、12、13、slope1）、`quad_leg_gravel`、`quad_leg_slope`、`quad_leg_stair`、`quad_leg_standing_1/2`、`quad_leg_track`、`single_leg_rr_trace`、`single_leg_rr_jct` 等。
 - **USD 指向**：`BENNETT_CFG_V6`（指向 `_4`）被 trot1、go2-11/12/13、go2-slope1、gravel1、slope3/4、stair1 使用；`go2-8`、`go2-10`、`single_leg_rr_jct` 用 `_3`。用户决定以后都用 `_3`，要训练时再改配置；`_3` 的碰撞体未简化，训练可能变慢。
 - 历史问题：free_gait4 把抬腿高度加倍后训练崩溃（std 出现负值），效果差；抬腿高度一直难调。
-- **bennett_1（2026-10-16 起的新训练任务，仅仿真）**【已确认】：观测先加噪声再做 12 Hz 低通（与部署端一致）。其爬行变体（go2-10 式相位时钟，观测 50 维）训出的 D4，在 Isaac 与 MuJoCo 里都能稳定前进、后退、侧移、转向，四脚各抬 31–55 mm，对 0–100 ms 的观测滞后仍稳（120 ms 失效）；训练用 `_4` 的 USD，D4 与 T9 在 `_3` 下也验证过能走。在 D4 上加横向速度项续训得到的 E2，Isaac 中侧移速度比由 0.63–0.90 升到 0.75–1.07，步态与抗延迟不变（K57）。MuJoCo 中后退、侧移的速度对地面摩擦敏感（摩擦 ×1.6 时降到指令的 0.4–0.65，K58），真机地面摩擦未测。详见 `bennett_rl/README.md` 的 K53、K54、K56–K58。**尚未上真机。**
+- **bennett_1（2026-10-16 起的新训练任务，仅仿真）**【已确认】：代码在 `bennett_rl/source/bennett_rl/bennett_rl/tasks/manager_based/bennett/`（2026-10-17 起）：`bennett_1` 冻结为 S1，`bennett_2` 为工作版本，爬行变体在 `bennett_2`；观测先加噪声再做 12 Hz 低通（与部署端一致）。其爬行变体（go2-10 式相位时钟，观测 50 维）训出的 D4，在 Isaac 与 MuJoCo 里都能稳定前进、后退、侧移、转向，四脚各抬 31–55 mm，对 0–100 ms 的观测滞后仍稳（120 ms 失效）；训练用 `_4` 的 USD，D4 与 T9 在 `_3` 下也验证过能走。在 D4 上加横向速度项续训得到的 E2，Isaac 中侧移速度比由 0.63–0.90 升到 0.75–1.07，步态与抗延迟不变（K57）。MuJoCo 中后退、侧移的速度对地面摩擦敏感（摩擦 ×1.6 时降到指令的 0.4–0.65，K58），真机地面摩擦未测。详见 `bennett_rl/README.md` 的 K53、K54、K56–K58。**尚未上真机。**
 - go2-10 在真机上前进步态很好、迁移准确；缺点是后退差、转向难操作、加速度大、走路砰砰、抬腿快【用户确认，2026-10-16；真机效果未独立验证】。仿真数据印证了抬腿快与落地冲击大（抬腿最大上升速度 0.65–1.04 m/s，落地前下降速度 0.37–0.67 m/s），后退、侧移、转向只能达到指令的 0.6–0.7。
 - 域随机化范围**一律待定，不给具体数值**，后续再分析。候选项：base 质量、腿部杆件质量、base 质心、惯量、关节零位偏置。
 
@@ -168,6 +169,7 @@
 | 系统辨识总计划 | `E:\HuanCun\Desktop\u2canfd\System_Identification\Plan.md` |
 | 排查记录（通信、寄存器、训练配置） | `E:\HuanCun\Desktop\u2canfd\System_Identification\docs\AUDIT_v0.md`、`BASELINE_AUDIT.md` |
 | 训练代码 | `E:\Project\Isaaclab\bennett_rl`（`SIM2REAL_PIPELINE.md` 是 sim2real 全流程清单） |
+| 训练工作日志（奖励、PPO、实验、训练待办，约 70 KB） | `E:\Project\Isaaclab\bennett_rl\README.md`；涉及训练、`bennett_1`、奖励、步态、域随机化时读其「基准与结论」和「待完成」，不必通读 |
 | 部署代码 | `E:\HuanCun\Desktop\u2canfd\sim2real\`（`quad_leg_xu\` 为迁移前的原位置，保留） |
 | 开题材料 | `E:\HuanCun\Desktop\徐龙翔\归档\开题\`（最终版 `材料_提交\20260917_徐龙翔-开题报告.docx`；配图 `材料_配图、视频、Gif\`） |
 | 工作区临时文件 | `E:\HuanCun\AI_tmp\Claude\` |
