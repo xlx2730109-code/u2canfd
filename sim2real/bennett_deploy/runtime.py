@@ -417,6 +417,18 @@ class DeploymentRunner:
         """Compare the training observation low-pass cutoffs with the runtime filters."""
         training = training_obs_lowpass_hz(self.contract.env_yaml)
         if not training:
+            # 训练端没有观测低通（go2-10、trot1、free_gait3）：运行时的滤波是训练里没有的，仅提示，不改行为
+            active = [
+                f"{name}={cutoff:g} Hz"
+                for name, cutoff in (("imu", self.args.imu_cutoff_hz), ("joint_vel", self.args.joint_vel_cutoff_hz))
+                if cutoff > 0.0
+            ]
+            if active:
+                print(
+                    "[OBS-FILTER] note: training has no observation low-pass, but runtime filters are on: "
+                    + ", ".join(active) + " (add ~13 ms lag at 12 Hz; set --imu_cutoff_hz 0 --joint_vel_cutoff_hz 0 to disable)",
+                    file=sys.stderr,
+                )
             return
         runtime = {
             "base_ang_vel": self.args.imu_cutoff_hz,

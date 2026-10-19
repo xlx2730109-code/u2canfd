@@ -1,0 +1,42 @@
+# 零力矩命令流 manifest
+run_id: 20261019_120238_powered_zt1000hz_low_latency_t1ms_q_r22
+local_start: 2026-10-19T12:02:38
+utc_start: 2026-10-19T19:03:10+00:00
+operator: xu
+purpose: 01_communication/B_motor_comm 基线：按部署同款负载记录反馈到达节奏
+safety:
+  motion_commands: false
+  enabled_motors: false
+  frame: MIT kp=0 kd=0 q=0 dq=0 tau=0 (零力矩)
+  precheck: 0xCC 状态查询，全部电机失能后才发送
+  close_called: false
+load:
+  rate_hz: 1000
+  motors_per_cycle: 8
+  can: 两路 CAN FD, 仲裁 1 Mbps, 数据 5 Mbps (BRS)
+  windows_timer_1ms: True
+  policy_in_loop: None
+  policy_schedule_clock: perf_counter
+  gc_disabled: False
+  queue_send: True
+  switch_interval_s: default(0.005)
+dll_profile: low_latency
+dll_path: sim2real/sdk/dlls_lowlatency/libdm_device.dll
+dll_sha256: 252FAEFDC70F1C52D61F93E74E29B07F871F00230E75985D03CAE7C43B4AF15E
+software:
+  python: 3.11.14
+  platform: win32 AMD64
+  git: {"commit": "bcb9fe3ba4fdda347ec38edc4b63c3d36e5f0b2f", "dirty": true}
+hardware:
+  can_device_sn: D6977F56F86C64B77B316E7154FA6DF3
+  device_firmware: dual_app v1.0.0.7
+backend: v1
+lib_version: unknown
+queue_send: True
+timer_1ms: True
+battery: unknown
+v_start: unknown
+v_end: unknown
+notes:
+  - 时间戳 t_host_mono_ns 为回调第一行的 perf_counter_ns（主机时间，含驱动批量交付）
+  - dev_timestamp 为帧头里设备自带的时间戳，单位与含义未验证

@@ -11,3 +11,13 @@ logs/
 # Machine-specific VSCode settings
 .vscode/settings.json
 
+# 通信辨识新采集的逐帧原始数据（每次运行约 30 MB），只保留在本机；manifest、meta、processed 汇总照常提交
+System_Identification/workstreams/01_communication/B_motor_comm/data/raw/**/frames.csv
+System_Identification/workstreams/01_communication/B_motor_comm/data/raw/**/tx.csv
+System_Identification/workstreams/01_communication/B_motor_comm/data/raw/**/flush.csv
+System_Identification/workstreams/01_communication/C_loop_timing/data/raw/**/frames.csv
+System_Identification/workstreams/01_communication/C_loop_timing/data/raw/**/tx.csv
+System_Identification/workstreams/01_communication/C_loop_timing/data/raw/**/flush.csv
+System_Identification/workstreams/01_communication/D_obs_freshness/data/raw/**/frames.csv
+System_Identification/workstreams/01_communication/D_obs_freshness/data/raw/**/tx.csv
+System_Identification/workstreams/01_communication/D_obs_freshness/data/raw/**/flush.csv

@@ -86,8 +86,9 @@ sim2real/
 │   ├── go2-10/                    go2-10
 │   └── trot1/                     trot1
 ├── sdk/                           达妙动态库
-│   ├── dlls/                      官方版（反馈每约 109 ms 一批）与 Linux `.so`
-│   ├── dlls_lowlatency/           补丁版（批量延迟改为 1 ms，真实延迟未测，无 Linux 版）
+│   ├── dlls/                      官方版（反馈每约 110–120 ms 一批）与 Linux x86-64 `.so`
+│   ├── dlls_linux_aarch64/        Linux aarch64（Jetson）版 `libdm_device.so`，1.x 接口，需要 libusb 1.0.27 以上
+│   ├── dlls_lowlatency/           补丁版（批量延迟改为 1 ms，反馈时龄均值约 7 ms，无 Linux 版）
 │   └── libusb-1.0.dll
 ├── tools/
 │   ├── 0_Return_to_zero.py        8 电机限速安全回零
@@ -107,7 +108,7 @@ sim2real/
 | --- | --- | --- |
 | `quad_leg_xu/bennett_deploy/` | `bennett_deploy/` | 复制后有改动，见 D |
 | `quad_leg_xu/quad_leg_*_deploy.py`（4 个） | 同名，位于本文件夹根 | 只把写死的路径改为打包策略优先、其次 `bennett_rl` 的解析 |
-| `dlls/`、`dlls_lowlatency/`、`libusb-1.0.dll` | `sdk/` | 无改动，`libdm_device.dll` 与原件逐字节相同 |
+| `dlls/`、`dlls_lowlatency/`、`libusb-1.0.dll` | `sdk/` | 无改动，`libdm_device.dll` 与原件逐字节相同；2026-10-20 新增 `dlls_linux_aarch64/` |
 | `0_Return_to_zero.py` | `tools/` | 动态库目录改为 `sdk/` |
 | `dev_sn.py` | `tools/` | 无改动 |
 | `WORKFLOW.md` | `docs/` | 无改动 |

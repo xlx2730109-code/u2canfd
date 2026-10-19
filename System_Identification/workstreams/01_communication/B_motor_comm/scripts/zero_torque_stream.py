@@ -42,6 +42,7 @@ SN = "D6977F56F86C64B77B316E7154FA6DF3"
 # CAN ID -> 通道（关节顺序 FL_thigh, FL_calf, FR_thigh, FR_calf, RL_thigh, RL_calf, RR_thigh, RR_calf）
 MOTORS = {1: 0, 2: 0, 3: 1, 4: 1, 5: 0, 6: 0, 7: 1, 8: 1}
 ERR_DISABLED = 0
+MOTORS_IDS = tuple(0x10 + c for c in MOTORS)  # 反馈帧 ID
 
 
 
@@ -87,6 +88,13 @@ def main() -> int:
                          "默认用 perf_counter")
     ap.add_argument("--switch_interval", type=float, default=None,
                     help="sys.setswitchinterval（秒）；不给则保持 Python 缺省 5 ms，与部署一致")
+    ap.add_argument("--queue_send", action="store_true",
+                    help="每周期 8 次入队（fill_can_queue）+ 1 次提交（send_can_queue），而不是 8 次 send_can（DeepSeek P0）")
+    ap.add_argument("--tail_s", type=float, default=0.3, help="停止发送后继续收帧的秒数")
+    ap.add_argument("--priority", choices=("normal", "high"), default="normal",
+                    help="Windows：high 把本进程设为 HIGH_PRIORITY_CLASS，检验发送尖峰是否与调度有关")
+    ap.add_argument("--lite", action="store_true",
+                    help="长稳用：不保存逐帧数据，只记汇总（每电机收帧数、时龄分布、发送耗时、周期、进程内存与 CPU），避免自身内存增长")
     ap.add_argument("--no_gc", action="store_true", help="发送前 gc.collect() 后 gc.disable()，检验发送尖峰是不是垃圾回收造成的")
     ap.add_argument("--timer_1ms", action="store_true",
                     help="Windows：像部署程序一样调用 timeBeginPeriod(1)，把系统定时器精度从 15.6 ms 提到 1 ms")
@@ -124,17 +132,22 @@ def main() -> int:
                 pol(obs)
         print(f"[策略] {args.policy} 观测维度 {obs_dim}，torch {torch.__version__}，线程数 {torch.get_num_threads()}")
 
+    if args.priority == "high" and sys.platform == "win32":
+        import ctypes
+        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x80)
     lib = lib_info()
     stamp = datetime.now()
-    tag = ("_t1ms" if timer_set else "") + ("_pol" if pol is not None else "") + ("_dclk" if args.deploy_clock else "")         + (f"_sw{args.switch_interval * 1000:g}" if args.switch_interval is not None else "") + ("_nogc" if args.no_gc else "")
+    tag = ("_t1ms" if timer_set else "") + ("_pol" if pol is not None else "") + ("_dclk" if args.deploy_clock else "")         + (f"_sw{args.switch_interval * 1000:g}" if args.switch_interval is not None else "") + ("_nogc" if args.no_gc else "") + ("_q" if args.queue_send else "") + ("_hi" if args.priority == "high" else "") + ("_lite" if args.lite else "") + (f"_tail{args.tail_s:g}" if args.tail_s != 0.3 else "")
     run_id = f"{stamp.strftime('%Y%m%d_%H%M%S')}_powered_zt{int(args.rate_hz)}hz_{lib['profile']}{tag}_r{args.repeat:02d}"
     # 带策略的运行属于 C_loop_timing（控制程序节拍），其余属于 B_motor_comm
     topic = "C_loop_timing" if pol is not None else "B_motor_comm"
     out_dir = WS / topic / "data" / "raw" / stamp.strftime("%Y-%m-%d") / run_id
-    out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[run] {run_id}\n[库] {lib}")
 
     frames: list = []
+    precheck_on = [True]  # lite 模式下，预检（读状态码）期间仍保存帧
+    counts: dict = {}
+    last_t: dict = {}
     ns = time.perf_counter_ns
 
     init = [dmc.DmActData(dmc.DM_Motor_Type.DM8006, dmc.Control_Mode.MIT_MODE, cid, 0x10 + cid, ch)
@@ -145,6 +158,15 @@ def main() -> int:
 
     def cb(device, frame):
         t = ns()
+        if args.lite and not precheck_on[0]:
+            try:
+                cid_ = int(frame.head.can_id)
+                counts[cid_] = counts.get(cid_, 0) + 1
+                last_t[cid_] = t
+            except Exception:
+                pass
+            orig_cb(device, frame)
+            return
         try:
             h = frame.head
             n = dlc_to_len(int(h.dlc))
@@ -155,6 +177,7 @@ def main() -> int:
         orig_cb(device, frame)
 
     control.getDevice().hook_recv_callback(cb)
+    out_dir.mkdir(parents=True, exist_ok=True)  # 设备已打开后才建目录；打不开设备时不留空目录
     motors = [(cid, control.getMotor(ch, cid)) for cid, ch in MOTORS.items()]
     time.sleep(0.1)
 
@@ -189,10 +212,22 @@ def main() -> int:
         sys.stdout.flush()
         os._exit(2)
 
+    flush_rows = []
+    if args.queue_send:
+        dev = control.getDevice()
+
+        def queue_send(channel, can_id, payload, *, canfd=None, brs=None):
+            data = bytes(payload)
+            return dev.fill_can_queue(int(channel), int(can_id), len(data), data,
+                                      control.canfd if canfd is None else canfd, False, False,
+                                      control.brs if brs is None else brs)
+        control._send = queue_send  # 只影响 control_mit；预检用的状态查询已在此之前发完
     if args.no_gc:
         import gc
         gc.collect()
         gc.disable()
+    precheck_on[0] = False
+    frames.clear()
     # 3) 零力矩命令流：每圈给 8 个电机各发一帧
     print(f"[发送] {args.rate_hz:g} Hz × 8 电机，持续 {args.seconds:g} s")
     tx = []
@@ -203,6 +238,17 @@ def main() -> int:
     k = 0
     n_fail = 0
     pol_rows = []
+    lite_ages = []
+    lite_cyc = []
+    lite_calls = {"max_us": 0.0, "over1ms": 0, "over3ms": 0, "n": 0}
+    res_rows = []
+    try:
+        import psutil
+        proc = psutil.Process()
+        proc.cpu_percent(None)
+    except Exception:
+        proc = None
+    next_res = t_start + int(5e9)
     pol_dt_ns = int(1e9 / args.policy_hz)
     next_pol = t_start
     next_pol_m = time.monotonic()
@@ -211,6 +257,9 @@ def main() -> int:
         if now - t_start >= args.seconds * 1e9:
             break
         cyc_t = now
+        if proc is not None and now >= next_res:
+            res_rows.append((round((now - t_start) / 1e9, 1), round(proc.memory_info().rss / 1e6, 1), proc.cpu_percent(None)))
+            next_res += int(5e9)
         now_m = time.monotonic()
         due = (now_m >= next_pol_m) if args.deploy_clock else (now >= next_pol)
         if pol is not None and due:
@@ -227,13 +276,34 @@ def main() -> int:
             next_pol_m += pol_dt_ns / 1e9  # 与 runtime.py 相同的追赶规则
             if next_pol_m < now_m - pol_dt_ns / 1e9:
                 next_pol_m = now_m + pol_dt_ns / 1e9
+        if args.lite:
+            lite_cyc.append(cyc_t)
+            if k % 10 == 0 and len(last_t) == len(MOTORS):
+                lite_ages.extend((cyc_t - last_t[c]) / 1e6 for c in MOTORS_IDS)
         for cid, m in motors:
             tb = ns()
             ok = control.control_mit(m, 0.0, 0.0, 0.0, 0.0, 0.0)
             ta = ns()
             if not ok:
                 n_fail += 1
-            tx.append((k, cid, m.GetChannel(), cyc_t, tb, ta, int(bool(ok))))
+            if args.lite:
+                d_us = (ta - tb) / 1e3
+                lite_calls["n"] += 1
+                if d_us > lite_calls["max_us"]:
+                    lite_calls["max_us"] = d_us
+                if d_us > 1000:
+                    lite_calls["over1ms"] += 1
+                if d_us > 3000:
+                    lite_calls["over3ms"] += 1
+            else:
+                tx.append((k, cid, m.GetChannel(), cyc_t, tb, ta, int(bool(ok))))
+        if args.queue_send:
+            tf0 = ns()
+            okf = dev.send_can_queue()
+            tf1 = ns()
+            flush_rows.append((k, tf0, tf1, int(bool(okf))))
+            if not okf:
+                n_fail += 1
         k += 1
         nxt = t_start + k * period_ns
         late = nxt - ns()
@@ -241,19 +311,37 @@ def main() -> int:
             time.sleep(late / 1e9)
     t_end = ns()
     cpu_s = time.process_time() - cpu0
-    time.sleep(0.3)  # 收尾：让在途反馈到达
+    time.sleep(args.tail_s)  # 收尾：让在途反馈到达
 
     # 4) 落盘（不调用 close()，避免发失能帧）
-    with open(out_dir / "frames.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["t_host_mono_ns", "channel", "can_id", "dlc", "canfd", "brs", "dir", "ack", "esi",
-                    "dev_timestamp", "data_hex"])
-        for r in frames:
-            w.writerow([*r[:10], r[10].hex()])
-    with open(out_dir / "tx.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["cycle", "can_id", "channel", "t_cycle_ns", "t_tx_begin_ns", "t_tx_end_ns", "send_ok"])
-        w.writerows(tx)
+    if args.lite:
+        import numpy as _np
+        a_ = _np.array(lite_ages) if lite_ages else _np.array([0.0])
+        c_ = _np.diff(_np.array(lite_cyc, dtype=_np.int64)) / 1e6
+        lite = {
+            "rx_per_motor": {int(k_): int(v_) for k_, v_ in sorted(counts.items())},
+            "age_ms": {"mean": float(a_.mean()), "p50": float(_np.percentile(a_, 50)), "p99": float(_np.percentile(a_, 99)), "max": float(a_.max())},
+            "cycle_ms": {"mean": float(c_.mean()), "p99": float(_np.percentile(c_, 99)), "max": float(c_.max()),
+                         "over_2ms": int((c_ > 2).sum()), "over_5ms": int((c_ > 5).sum())},
+            "send_call": lite_calls,
+        }
+        (out_dir / "lite.json").write_text(json.dumps(lite, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    else:
+        with open(out_dir / "frames.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["t_host_mono_ns", "channel", "can_id", "dlc", "canfd", "brs", "dir", "ack", "esi",
+                        "dev_timestamp", "data_hex"])
+            for r in frames:
+                w.writerow([*r[:10], r[10].hex()])
+        with open(out_dir / "tx.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["cycle", "can_id", "channel", "t_cycle_ns", "t_tx_begin_ns", "t_tx_end_ns", "send_ok"])
+            w.writerows(tx)
+    if flush_rows:
+        with open(out_dir / "flush.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["cycle", "t_flush_begin_ns", "t_flush_end_ns", "flush_ok"])
+            w.writerows(flush_rows)
     if pol_rows:
         with open(out_dir / "policy.csv", "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
@@ -262,9 +350,18 @@ def main() -> int:
     meta = {
         "run_id": run_id, "t_start_ns": t_start, "t_end_ns": t_end, "t_mono0_ns": t_mono0, "t_wall0_ns": t_wall0,
         "rate_hz": args.rate_hz, "seconds": args.seconds, "cycles": k, "tx_frames": len(tx), "tx_fail": n_fail,
-        "policy": args.policy, "policy_hz": args.policy_hz if pol is not None else None, "policy_ticks": len(pol_rows), "rx_frames_total": len(frames), "process_cpu_s": round(cpu_s, 3), "cpu_over_wall": round(cpu_s / ((t_end - t_start) / 1e9), 3), "passive_frames_before_tx": passive, "initial_status": status,
+        "policy": args.policy, "policy_hz": args.policy_hz if pol is not None else None, "policy_ticks": len(pol_rows), "resources_every_5s": res_rows, "priority": args.priority, "tail_s": args.tail_s, "rx_frames_total": (sum(counts.values()) if args.lite else len(frames)), "lite": args.lite, "process_cpu_s": round(cpu_s, 3), "cpu_over_wall": round(cpu_s / ((t_end - t_start) / 1e9), 3), "passive_frames_before_tx": passive, "initial_status": status,
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    try:
+        fw_version = control.getDevice().get_version()
+    except Exception:
+        fw_version = "unknown"
+    try:
+        import importlib.metadata as _md
+        lib_version = "dmcan_sdk " + _md.version("dmcan_sdk")
+    except Exception:
+        lib_version = "unknown"
     manifest = f"""# 零力矩命令流 manifest
 run_id: {run_id}
 local_start: {stamp.isoformat(timespec='seconds')}
@@ -285,6 +382,7 @@ load:
   policy_in_loop: {args.policy}
   policy_schedule_clock: {"time.monotonic" if args.deploy_clock else "perf_counter"}
   gc_disabled: {args.no_gc}
+  queue_send: {args.queue_send}
   switch_interval_s: {args.switch_interval if args.switch_interval is not None else "default(0.005)"}
 dll_profile: {lib['profile']}
 dll_path: {lib['path']}
@@ -295,7 +393,11 @@ software:
   git: {json.dumps(git_info())}
 hardware:
   can_device_sn: {SN}
-  device_firmware: dual_app v1.0.0.7
+  device_firmware: {fw_version}
+backend: v1
+lib_version: {lib_version}
+queue_send: {args.queue_send}
+timer_1ms: {timer_set}
 battery: unknown
 v_start: unknown
 v_end: unknown

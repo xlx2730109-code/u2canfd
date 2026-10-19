@@ -6,6 +6,7 @@ import ctypes
 import hashlib
 import importlib
 import os
+import platform
 import struct
 import sys
 import threading
@@ -96,7 +97,11 @@ if sys.platform == "win32":
     DmCanContext.__init__.__globals__["find_backend_dll_path"] = _selected_dm_backend_path
 elif sys.platform == "linux":
     # dmcan-sdk 只在包目录与当前工作目录下找 dlls/，这里绑定到 sim2real/sdk，使启动目录不受限制。
-    _dm_so_path = _SDK_DIR / "dlls" / "libdm_device.so"
+    # 按 CPU 架构选库：x86-64 用 dlls/，aarch64（Jetson）用 dlls_linux_aarch64/。
+    # aarch64 版需要 libusb >= 1.0.27（含 libusb_init_context），系统自带 1.0.25 不够，
+    # 在装有 libusb 1.0.29 的 conda/mamba 环境里运行（上面的 CONDA_PREFIX 预加载会生效）。
+    _dm_so_dir = "dlls_linux_aarch64" if platform.machine().lower() in ("aarch64", "arm64") else "dlls"
+    _dm_so_path = _SDK_DIR / _dm_so_dir / "libdm_device.so"
     if not _dm_so_path.is_file():
         raise FileNotFoundError(f"dmcan shared library not found: {_dm_so_path}")
     _dmcan_context_module = importlib.import_module("dmcan.dmcan_context")

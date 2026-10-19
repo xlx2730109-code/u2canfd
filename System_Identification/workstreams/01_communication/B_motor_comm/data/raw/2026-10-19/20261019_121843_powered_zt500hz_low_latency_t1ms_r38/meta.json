@@ -1,0 +1,59 @@
+{
+  "run_id": "20261019_121843_powered_zt500hz_low_latency_t1ms_r38",
+  "t_start_ns": 65089448778800,
+  "t_end_ns": 65119448945200,
+  "t_mono0_ns": 65089448776600,
+  "t_wall0_ns": 1792437524120167200,
+  "rate_hz": 500.0,
+  "seconds": 30.0,
+  "cycles": 15000,
+  "tx_frames": 120000,
+  "tx_fail": 0,
+  "policy": null,
+  "policy_hz": null,
+  "policy_ticks": 0,
+  "resources_every_5s": [
+    [
+      5.0,
+      44.5,
+      22.6
+    ],
+    [
+      10.0,
+      53.7,
+      17.8
+    ],
+    [
+      15.0,
+      62.3,
+      20.3
+    ],
+    [
+      20.0,
+      70.9,
+      18.4
+    ],
+    [
+      25.0,
+      80.1,
+      18.4
+    ]
+  ],
+  "priority": "normal",
+  "tail_s": 0.3,
+  "rx_frames_total": 120000,
+  "lite": false,
+  "process_cpu_s": 5.844,
+  "cpu_over_wall": 0.195,
+  "passive_frames_before_tx": 0,
+  "initial_status": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0
+  }
+}

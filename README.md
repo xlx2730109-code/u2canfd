@@ -366,6 +366,36 @@ SW 质量覆盖的 7 种零件：
 | 策略 tick 处反馈时龄 均值 / ms（perf_counter） | — | 6.6 | — |
 | 策略 tick 处反馈时龄 p99 / ms | — | 14.3 | — |
 
+发送方式对照（Windows，`env_isaaclab` 的 Python 3.11，补丁库，1 ms 定时器，缺省线程切换间隔，30 s；A = 每帧一次 `send_can`，B = 每周期 8 次入队加 1 次提交，交替 A1 B1 A2 B2，`compare_send_ab.py`）：
+
+| 指标 | A1 | B1 | A2 | B2 |
+| --- | ---: | ---: | ---: | ---: |
+| 每周期 8 帧发送跨度 p50 / ms | 0.642 | 0.132 | 0.641 | 0.127 |
+| 发送跨度 p99 / ms | 2.04 | 1.36 | 2.04 | 1.33 |
+| 发送跨度 最大 / ms | 21.9 | 10.4 | 14.6 | 8.7 |
+| 跨度超过 1 ms 的周期数 | 1952 | 864 | 1894 | 763 |
+| 跨度超过 3 ms 的周期数 | 54 | 13 | 57 | 22 |
+| 单次调用超过 3 ms 的次数 | 17 | 0（入队） | 17 | 0（入队） |
+| 提交 p50 / p99 / µs | — | 75 / 1270 | — | 72 / 1248 |
+| 发令周期 p99 / ms | 2.16 | 2.06 | 2.14 | 2.16 |
+| 周期超过 2 ms 的次数 | 465 | 315 | 468 | 394 |
+| 反馈时龄 均值 / ms | 6.93 | 6.77 | 6.77 | 6.78 |
+| 接收帧数 / 发送帧数 | 240000 / 240000 | 240000 / 240000 | 240000 / 240000 | 239948 / 240000 |
+
+10 分钟长稳（Windows，`env_isaaclab` 的 Python 3.11，1 ms 定时器，每周期 8 帧逐帧发送，60 万个周期、480 万次发送；`--lite` 只记汇总，`summarize_lite.py`）：
+
+| 指标 | 补丁库 `low_latency` | 试验 DLL（睡眠 0.5 ms） |
+| --- | ---: | ---: |
+| 每电机缺帧数 | 0 | 0 |
+| 反馈时龄 均值 / ms | 7.04 | 0.60 |
+| 反馈时龄 p99 / ms | 14.9 | 1.38 |
+| 反馈时龄 最大 / ms | 29.8 | 17.8 |
+| 发令周期 p99 / ms | 1.88 | 1.49 |
+| 周期超过 5 ms 的次数 | 254 | 212 |
+| 单次发送超过 3 ms 的次数 | 285 | 228 |
+| 进程 CPU（单核满载为 100%） | 约 39% | 约 137% |
+| 进程内存增长 / MB（10 分钟） | +43.6 | +42.0 |
+
 反馈时龄指每个发令周期开始时，各电机最近一次反馈已经到达主机多久（主机时间）。
 
 01-K24：测量条件如上；同一库两次结果一致，两库之间差异远大于两次之间的差异。
@@ -396,6 +426,27 @@ SW 质量覆盖的 7 种零件：
 01-K50：电机寄存器 `can_br` 八个都是 9。达妙手册的编码表为 0=125K、1=200K、2=250K、3=500K、4=1M、5=2M、6=2.5M、9=5M，所以 9 是 5 Mbps；手册还写明：上电后波特率大于 1 Mbps 时电机自动用 CAN FD，仍可接收 CAN 2.0B 帧，但反馈帧用 CAN FD。这解释了"5M"（电机的数据段）与"1M"（仲裁段）两种说法，也解释了为什么盒子通道必须设成 CAN FD 才能收到反馈（来自搜索摘要，未逐页核对手册）。
 01-K51：SDK 2.x（DeepSeek 报告，部分核实）：`dmcan-sdk` 2.1.1 于 2026-10-12 发布，后端库改为 `libdmcan`，接口与 1.x 不兼容；要求模块固件 V2.0.0 及以上（双路构建标识不低于 `b5c2574`），旧固件上通道使能会失败；官方说明提到 Linux arm64 库，但没有明确列出。现在盒子固件是 `dual_app v1.0.0.7`，不满足；公开仓库里没有 V2.0.0 固件，需要向达妙要。DeepSeek 报告的"1 kHz 端到端 p50 约 1.8 ms"、gs_usb 路线、JetPack 6.2 没有 `gs_usb.ko`、Jetson 原生 `can0` 环回数据，我没有核实（未验证）。
 01-K52：12 Hz 低通（DeepSeek 称"比通信更大的问题"）对 `bennett_1` 不成立：`bennett_rl/README.md` 的 K32 记录训练端已对角速度、重力投影、关节速度加噪声后做同样的 12 Hz 一阶低通，与部署端一致；只有旧任务（`trot1`、`go2-10`、`free_gait3`）训练里没有，用这些旧策略上真机才是失配。`docs/CONTROL_CONTRACT.md` 第 29 行"训练里未见"是旧说法。
+01-K53：12 Hz 低通的精确情形（DeepSeek 交接包 §5，已核实）：`bennett_1_crawl_D4`、`T9`、`bennett_1_free_S1` 的训练配置有观测低通（12 Hz），与运行时一致；`go2-10`（`runtime.py` 的缺省策略）、`trot1`、`free_gait3` 训练配置里没有，而运行时缺省仍加 12 Hz（时间常数约 13.3 ms），`_print_obs_filter_check` 在训练端无滤波时原先直接返回、不提示。已改为只打印一条提示（`[OBS-FILTER] note: ...`），行为不变，`--imu_cutoff_hz 0 --joint_vel_cutoff_hz 0` 可关闭（已核实截止频率为 0 时直通）；单元测试 12 项通过。用户说 `go2-10` 真机迁移很好，是在带滤波的情况下，是否关闭由用户定，不要贸然去掉。
+01-K54：2026-10-20 盒子被接到 Jetson（`lsusb` 有 `34b7:6632 DaMiao-Tech DM-USB2FDCAN`，设备节点权限 `crw-rw-rw-`，有 `99-damiao-usb.rules`），当天用户又接回了 Windows。更正：我先前写“Jetson 上没有任何 `libdm_device*`、没有 pyserial”是错的——我用的 claude-lab 账户看不到 `seeed` 用户的家目录，只搜了自己能看到的地方。实际 `seeed` 家目录下有 aarch64 的 1.x `libdm_device.so`（`~/workspaces/Xu/4_foot/DaMiao/u2canfd/dlls/`），并有 pyserial 3.5；Jetson 已能通信（01-K61）。仓库里 `sim2real/sdk/dlls/libdm_device.so` 仍是 x86-64，Jetson 上跑仓库代码要用自己的 aarch64 库（01-T18）。
+01-K55：发送队列接口（DeepSeek 的 P0，核实 API 存在）：`dmcan` 1.0.4 的 `dmcan_device.py` 有 `fill_can_queue` 与 `send_can_queue`，`libdm_device.dll` 导出 `dmcan_device_fill_can_queue` 与 `dmcan_device_can_queue_send`。`zero_torque_stream.py` 已加 `--queue_send`（8 次入队加 1 次提交，只替换本脚本里的发送函数，不改部署代码），manifest 增加 `backend`、`lib_version`、`firmware_build_id`、`queue_send`、`timer_1ms`；还没运行，因为盒子不在 Windows。验收标准按 DeepSeek 的建议：发送跨度 p50 小于 0.30 ms、超过 3 ms 的尖峰少于 10 个/30 s、`tx = rx` 仍成立，A/B/A/B 交替各 30 s。
+01-K56：Windows 上 `VMUSBArbService`（VMware USB Arbitrator）是运行状态、自动启动；DeepSeek 推测它可能截获 USB 并造成发送尖峰（未验证）。停止系统服务属于改系统设置，由用户决定。
+01-K57：DeepSeek 称"我之前测出 `sleep(1 ms)` 是 15.6 ms 是两线程抢 GIL 的假象，单线程是 1.54 ms"，指的是它自己对 Python `time.sleep` 的测量；这与 01-K37 不矛盾：K37 是单线程直接调用 DLL 用的 MinGW `std::this_thread::sleep_for`，睡 1 ms 实际约 15.2 ms，且改成 0.5 ms 的 DLL 副本确实把时龄压到了约 0.6 ms（01-K38），不受 Python `time.sleep` 影响。
+01-K58：达妙 Gitee 公开资料的核实（DeepSeek 报告，2026-10-20，我只浏览了目录页，没有下载任何文件）：①`kit-miao/dm-device-sdk` 的 `C&C++/lib/v2.1.0/` 有 `linux/arm64/libdmcan.so`（已核实）；②`kit-miao/usb2canfd-dual` 的 `固件/` 下有 `dm_usb2canfd_dual_app_v2.0.0.enc`，说明写的是当前出厂固件，用配套上位机软件的"固件升级"选择 `.enc` 刷写，页面没有列出 1.0.0.x 的回退文件，也没有说 V2.0.0 固件能否继续配合 1.x 的 `libdm_device`；③`kit-miao/dm-tools/gs_usb_drives/` 有 `gs_usb_sppe_Orin_NX/` 文件夹，里面是否有预编译 `.ko`、适用内核版本，我没有核实（未验证）。所以"要不要向达妙要固件和 arm64 库"已经不是问题，问题变成"要不要刷固件"。
+01-K59：刷固件的取舍（我的判断，已按 01-K61 更正）：盒子是机器人唯一的通信盒，现在 Windows 上的 1.x 部署能正常迁移；刷成 V2.0.0 后 1.x 库是否还能用、能否回退到 `v1.0.0.7`，公开资料都没有说，一旦刷坏或 1.x 不兼容，现有部署会受影响；走 gs_usb 固件则盒子只能在 Linux 用。原先我说刷固件主要是为了让 Jetson 能用，这一点不成立：Jetson 上已有 aarch64 的 1.x 库并已跑通。现在刷固件的好处只剩官方支持、看门狗（解决 `TIMEOUT=0`）、真上总线回执、丢包统计，建议暂缓，先向达妙问清回退与兼容。
+01-K60：DeepSeek 称"队列发送那次 `r20` 目录是空的，可能是挂在循环里或 DLL 不支持队列"，实际是那次试跑在打开设备时就失败了（盒子已经被接到 Jetson，报 `No dmcan device found`），并没有进入发送循环，也不能说明 DLL 是否支持队列；空目录是脚本在打开设备前就建了运行目录造成的，已改为设备打开成功后才建目录，并删除了空目录。队列发送是否可用仍未验证。
+01-K61：Jetson 上的 1 kHz × 8 电机零力矩测量（DeepSeek 完成，数据在 `E:/HuanCun/AI_tmp/Deepseek/01_comm_crosscheck/JETSON_CAN_MEASURED.md`，我没有独立复现）：用 `seeed` 家目录里的 aarch64 `libdm_device.so`，纯 ctypes 调 C 接口，加载需要 `LD_LIBRARY_PATH` 指向 `~/mamba/envs/dm_runtime/lib` 里的 libusb 1.0.29（系统自带 1.0.25，缺 `libusb_init_context`）；30 s，tx = rx = 240 000，失败 0，8 台全程失能。未补丁的 `.so`：批间隔 p50 102.3 ms，50 Hz 拍上时龄 p50 48.8 ms、p99 99.2 ms、最大 100.0 ms，周期 p99 1.094 ms。把 `/tmp` 里的副本在偏移 `0x123B8` 处的 `1e8` 改成 `5e5`（0.5 ms，原件未动）：时龄 p50 0.393 ms、p99 3.31 ms、最大 19.2 ms，但周期 p99 变成 2.48 ms、发送跨度 p99 2.45 ms、超过 3 ms 的周期 217 个（未补丁 12 个）。DeepSeek 的解释：连续回调与发送环抢 GIL，Orin Nano 比台式机慢，部署要配 `sys.setswitchinterval(0.0005)`（推测，未验证）。Linux 的 1 kHz 发令环比 Windows 稳（周期 p99 1.09 对 1.64–1.76 ms），说明 Windows 上的 7–33 ms 尖峰多半是主机或 USB 栈的问题。
+01-K62：DeepSeek 对其"批间隔最大 2926 ms"的更正：连续流下"批"是两段连续流之间的间隔，不是丢帧；每次运行只有一次 300–550 ms 的间隙，是收尾那 0.3 s 的空档。我的分析脚本在 0.5 ms 的 custom 组里同样出现"批数很少、批间隔很大"，含义相同，不能当作冻结。
+01-K63：队列发送把每周期 8 帧的发送跨度中位数从约 0.64 ms 降到约 0.13 ms（约 5 倍），跨度超过 3 ms 的周期数和最大值约减半，单次入队不再出现超过 3 ms 的调用；尖峰没有消失，而是集中到提交那一次（p99 约 1.25 ms）。发令周期 p99 与反馈时龄基本不变（周期超过 2 ms 的次数 465 / 468 降到 315 / 394，不显著），说明发令环的抖动不主要来自发送。接口可用：`fill_can_queue` 与 `send_can_queue` 在 1.x 的 Windows DLL 上能正常收发，5 s 试跑 `tx = rx`。
+01-K64：队列发送有偶发的尾部丢帧：共 6 次队列运行（含 5 s 试跑）中 2 次接收帧数少于发送帧数（缺 52 帧与缺 3 帧，缺的是最后约 10 个周期的反馈，分布在各电机上），所有提交的返回值都是成功；而逐帧发送的 10 余次运行全部 `tx = rx`。不满足 DeepSeek 提的"`tx = rx` 必须成立"，所以先不采用；原因未明（推测：最后一次提交的帧或其反馈未被交付，未验证）。可由 DeepSeek 在 Jetson 的 `.so` 上同样对照。
+01-K65：同一轮里 `rx` 在 `t_end` 之后到达的帧数：逐帧发送约 80–110，队列发送 0–112；缺帧的那次（52 帧）`t_end` 之后一帧也没到，说明那次接收在最后一个批之前就停了。
+01-K66：DeepSeek 的队列丢帧分析（`E:/HuanCun/AI_tmp/Deepseek/01_comm_crosscheck/QUEUE_LOSS.md`）：缺 52 帧那次（52 ÷ 8 = 6.5 个周期）是尾部丢失，最后一个反馈恰好落在 `t_end`，之后 0.3 s 收尾窗口里一帧也没来；缺 3 帧那次（约 12 ppm）散在中途，末帧偏移正常，是另一种情形。我用数据核实了这些事实（`flush_ok` 全为 1、各电机缺帧分布、`t_end` 之后到达的帧数），属实。它的推断"进程退出时最后一批还没上线"与我的观察不符：脚本在 `t_end` 之后还睡了 0.3 s 才退出，晚到的帧仍应送达；所以尾部丢失的原因未明，我已加 `--tail_s 1.0` 对照（结果见 01-K67）。DeepSeek 建议的验收口径"测量窗口内 `tx = rx`、窗口外允许尾部差异"和长稳统计中途丢帧数，我接受。
+01-K67：队列发送的尾部丢帧在加长收尾后依然存在：`--tail_s 1.0` 的 3 次队列运行分别缺 28、26、34 帧，进程优先级 high 的队列运行缺 34 帧，逐帧发送的全部运行（含 10 分钟长稳）`tx = rx`。加长收尾到 1 秒也没有补回来，说明不是晚到，缺的帧没有上总线或没有送达；至此 10 次队列运行里 6 次缺帧，没有发现规律，原因未明。队列发送的发送跨度收益（01-K63）不能抵消丢帧，所以不采用。
+01-K68：aarch64 库已放进仓库（01-T18 完成）：`sim2real/sdk/dlls_linux_aarch64/libdm_device.so`，来自 Jetson 的 `seeed` 用户目录，由 DeepSeek 拷回，SHA256 `4A73C8EC7D64342F0D0A1156D5102F519C5F176FB23696740F254FE6492C3F2A`（我核对了哈希一致）；ELF 头 `e_machine = 0xB7`（AArch64）、64 位小端，导出 `dmcan_device_fill_can_queue` 与 `dmcan_device_can_queue_send`，依赖 `libusb-1.0.so.0` 且用到 `libusb_init_context`（libusb 1.0.27 以上）。`dm_can.py` 的 Linux 分支改为按 `platform.machine()` 选目录（aarch64 用 `dlls_linux_aarch64/`，其余用 `dlls/`）。在 Windows 上只能做语法检查，没有在 Jetson 上加载验证。
+01-K69：反馈帧内容与分辨率（用 `20261019_*_r21` 的零力矩数据按 DM8006 量程 PMAX 12.5 rad、VMAX 45 rad/s、TMAX 20 N·m 解码，电机失能、机器人静止）：位置 16 位，量化步长 0.38 mrad；速度 12 位，步长 0.022 rad/s；力矩 12 位，步长 0.0098 N·m。静止时位置噪声标准差 0 至 0.18 mrad，小于量化步长，所以相邻反馈帧位置完全相同的比例为 60% 至 100%；速度噪声标准差 0.010–0.015 rad/s，力矩噪声约 0.005 N·m。反馈帧还带 MOS 与转子温度（约 30 °C 与 24–28 °C）。训练里关节位置观测噪声 ±0.01 rad、速度 ±1.5 rad/s，比静止实测大约 50 到 100 倍（与 `bennett_rl/README.md` 的 T19 一致）。反馈每帧一次更新（1 kHz），位置步长小，对控制没有影响，主要影响观测噪声的设定。
+01-K70：进程优先级设为 HIGH 对发送尖峰有帮助但不能消除：逐帧发送下发送跨度超过 3 ms 的周期数 54、57 降到 28、36，周期超过 2 ms 的次数 465、468 降到 257、279，发令周期 p99 2.14–2.16 降到 1.97–1.99 ms，但最大仍是 11.5–21.6 ms。说明尖峰一部分来自 Windows 调度。
+01-K71：负载扫描（逐帧发送，每周期 8 帧）：500 Hz 时每周期发送跨度中位数仍约 0.64 ms，说明每次发送的开销约 80 µs，与频率无关；目标 2 kHz 时 30 s 只跑了 41139 个周期，即实际约 1371 Hz（32.9 万帧，收发一一对应），所以 Python 3.11 逐帧发送 8 个电机的上限约 1.37 kHz，1 kHz 的余量约 27%。发送耗时超过 3 ms 的调用在 500、1000、2000 Hz 下每 30 s 都是 13–17 次，且成串出现（连续 3–4 次落在同一个 10–20 ms 的停顿里，停顿间隔不规则、约 3–7 s），与负载无关，指向主机或 USB 栈的停顿；DeepSeek 在不碰 CAN 的忙等对照里也测到 20 s 内 8 次超过 2 ms 的停顿，最大 6 ms（未独立复现）。
+01-K72：10 分钟长稳（上面的表）：补丁库与试验 DLL 都没有丢帧；试验 DLL 的反馈时龄均值 0.60 ms、p99 1.38 ms，发令周期 p99 反而更好（1.49 对 1.88 ms），代价是约 1.4 个核的 CPU；两者进程内存都线性增长约 43 MB，增长量与脚本自己保存的统计列表相当（约 39 MB），不是动态库泄漏，两个库的增长一样。时龄最大值 17.8 与 29.8 ms 来自主机侧的停顿（01-K71）。与 DeepSeek 在 Jetson 上"0.5 ms 让发令环抖动变差"的结果相反，Windows 上没有变差（平台不同，推测与核数和调度有关，未验证）。
+01-K73：Windows 上为 custom DLL 做的长稳只有 10 分钟一次；DeepSeek 建议的 30 分钟 × 3 次与断电或重插一次的验证没有做，Jetson 才是主平台，这部分交给 DeepSeek 在 Jetson 上做。
 
 ### D. 方案
 
@@ -453,6 +504,7 @@ sim2real/bennett_deploy/dm_can.py                         电机驱动封装：M
 sim2real/bennett_deploy/runtime.py                        部署主循环：1 kHz 发令环、50 Hz 策略环、12 Hz 低通
 sim2real/bennett_deploy/imu.py                            DM-IMU 串口读取
 sim2real/sdk/dlls/                                        官方 libdm_device：Windows 的 .dll、Linux 的 .so（x86-64）
+sim2real/sdk/dlls_linux_aarch64/                          Jetson（aarch64）的 libdm_device.so，需要 libusb 1.0.27 以上
 sim2real/sdk/dlls_lowlatency/                             补丁版 Windows DLL（批量间隔改为 1 ms）
 System_Identification/docs/DATA_CONTRACT.md               数据记录规则：实验身份证、命名、记录字段
 System_Identification/docs/HARDWARE_SAFETY_CHECKLIST.md   上机前的安全检查清单
@@ -504,7 +556,7 @@ docs/ROBOT.md                                             机器人总览
 | I10 | Linux `.so` 是 x86-64 | 已知 | 见 01-K5、01-K51 |
 | I11 | `TIMEOUT=0` | 已知 | 见 01-T8、01-K49 |
 | I12 | IMU 轮询读法多 0.4 ms、最坏 9 ms | 成立但收益小 | 记入待完成，改 `imu.py` 前需实机验证 |
-| 低通 | 12 Hz 低通比通信更大 | 对 `bennett_1` 不成立 | 见 01-K52 |
+| 低通 | 12 Hz 低通比通信更大 | 对 `bennett_1` 不成立；对 `go2-10`、`trot1`、`free_gait3` 成立（缺省策略静默失配） | 已加提示（01-K52、01-K53） |
 
 ## 已完成
 
@@ -541,16 +593,20 @@ docs/ROBOT.md                                             机器人总览
 - [ ]  01-T2 控制程序节拍：加入 IMU 读取与日志写盘后的节拍（发令环与推理已测，见 01-K29、01-K43）；IMU 现在接在 Jetson 上。
 - [ ]  01-T3 观测新鲜度：IMU 的新鲜度，以及完整部署程序下策略取观测时关节反馈的时龄（零力矩流下的结果见 01-K26、01-K27）。
 - [ ]  01-T4 是否采用睡眠常量不足 1 ms 的 DLL（01-K38）：先请用户在真实部署程序下试，看 CPU 占用与行为；Linux/Jetson 找 arm64 版 `.so`，检查同样的常量（01-K39）。
-- [ ]  01-T5 发送调用偶发阻塞（最长约 11 ms，3.11 下曾到 33 ms）的原因：已排除垃圾回收（01-K47），仍待查 Windows 调度与 USB 写入。
-- [ ]  01-T6 Jetson：找 arm64 SDK，重复 01-K24 至 01-K29 的测量以及 T2、T3；卡在 01-K5，盒子要接到 Jetson。
+- [ ]  01-T5 发送调用偶发阻塞（最长约 11 ms，3.11 下曾到 33 ms）：已排除垃圾回收（01-K47）与 GIL 争用，与负载无关、成串出现（01-K71），提高进程优先级能减半但不能消除（01-K70），Linux 上发令环更稳（01-K61）；结论：主要是 Windows 主机或 USB 栈的停顿，Jetson 为主平台后优先级低；可请用户停 VMware USB Arbitrator 后重测（01-K56）。
+- [ ]  01-T6 Jetson：1 kHz 零力矩基线已由 DeepSeek 测完（01-K61）；剩余：关 GC 与调 `setswitchinterval` 复测抖动、长稳 10 分钟以上、0.9 ms 与 1.5 ms 常量、策略推理加入发令环、IMU 新鲜度；用户已把 Jetson 侧工作交给 DeepSeek，我做 Windows 侧与文档。
 - [ ]  01-T7 把结果折成策略步，写进 `bennett_rl/README.md` 的 T4a、T4e；Windows 补丁库的数字已有（01-K28），Jetson 与完整程序下的数字待 T2、T3、T6。
 - [ ]  01-T8 审查电机 `TIMEOUT` 配置与软件反馈超时（现为 0.5 s，对官方库约 120 ms 的批量交付不起作用）。
 - [ ]  01-T9 部署时钟修复已完成并验证（01-K48），尚未在真机整机运行；请用户下次上机时留意策略步间隔与日志里的反馈时龄是否正常。
-- [ ]  01-T10 发送侧余量：每周期 8 次发送占约 62–66% 的 1 ms；评估批量发送（SDK 2.x 的 `send_can_batch`）、减少每次调用的 Python 开销，并补 2 kHz 测试（DeepSeek I5）。
-- [ ]  01-T11 向达妙要 V2.0.0 固件（双路构建不低于 `b5c2574`）与 `libdmcan` 2.1 的 Windows 与 Linux arm64 包（01-K51）；拿到前不迁移 SDK 2.x，现有 1.x 路线继续。
-- [ ]  01-T12 custom DLL（睡眠 0.5 ms）上真机前：长稳 10–30 分钟、CPU 占用、2 kHz 余量、有无内存增长或丢帧（01-K38，PATCH.md）。
-- [ ]  01-T13 IMU 读法：`imu.py` 的轮询加 `sleep(1 ms)` 改阻塞读，DeepSeek 在 Jetson 上测得中位时龄 1.25 到 0.85 ms、最大 8.96 到 0.96 ms（I12，未独立复现）；收益小，需要在 Windows 与 Jetson 上实机验证后再改。
+- [ ]  01-T10 发送侧余量：每周期 8 次发送占约 62–66% 的 1 ms；先做 01-T15 的队列发送，再评估 SDK 2.x 的 `send_can_batch`，并补 500 Hz × 8 与 1 kHz × 1 各 30 s 判断尖峰是否与负载相关（DeepSeek I5、P2）。
+- [ ]  01-T11 由用户决定要不要刷 V2.0.0 固件（01-K58、01-K59）：Jetson 已能用 1.x 库，不再是刷固件的理由，优先级降低；仍需向达妙问清回退与 1.x 兼容、100 ms 常量、时间戳含义，问题清单见 `references/问达妙的问题.md`；没有备用盒子或确认能回退之前，不刷这台盒子。
+- [ ]  01-T12 custom DLL（睡眠 0.5 ms）上真机前的长稳测试：Windows 上 10 分钟已做（01-K72：无丢帧、时龄 p99 1.38 ms、内存增长来自脚本自身、CPU 约 137%，单核占用的通过标准 25% 不满足）；DeepSeek 建议的 30 min × 3 次与断电重插一次未做，Jetson 为主平台，交给 DeepSeek 在 Jetson 上做；是否采用 custom DLL 由用户决定（多占 1 个核）。
+- [ ]  01-T13 IMU 读法：`imu.py` 的轮询加 `sleep(1 ms)` 改阻塞读（`timeout=0.02` 加 `ser.read(1)`），DeepSeek 在 Jetson 上测得中位时龄 1.25 到 0.85 ms、最大 8.96 到 0.96 ms，改法见 `E:/HuanCun/AI_tmp/Deepseek/handover_20261020/PATCHES.md`；我没有独立复现（Jetson 上我的账户没有 pyserial 且不联网，Windows 上没有 IMU），所以没改部署代码；验收：IMU 时龄 p99 小于 1.5 ms、最大小于 2 ms、CRC 错误为 0。
 - [ ]  01-T14 写 `params/timing.yaml`：等 Jetson 与 IMU 的数字齐了，再把观测时龄、命令频率、库版本与哈希落成参数文件（DeepSeek I7）。
+- [ ]  01-T15 队列发送丢帧（01-K63 至 01-K67）：发送跨度降到约 1/5，但 10 次队列运行里 6 次缺帧，加长收尾无效，原因未明；暂不采用；可请 DeepSeek 在 Jetson 的 `.so` 上同样对照（`jetson_queue_ab.py` 已写好），Windows 上不再继续。
+- [ ]  01-T16 请用户暂时停止 `VMUSBArbService`（需要管理员权限）后重测发送尖峰（01-K56）；这是改系统设置，我不做。
+- [ ]  01-T17 补 manifest 字段的旧数据说明：17 次旧运行没有 `backend`、`lib_version`、`queue_send` 字段，按默认 `v1`、`dmcan_sdk 1.0.4`、`false`、`firmware dual_app v1.0.0.7` 理解。
+- [ ]  01-T18 在 Jetson 上验证仓库能直接加载 aarch64 库（01-K68）：在装有 libusb 1.0.29 的环境（`~/mamba/envs/dm_runtime`）里 `from bennett_deploy import dm_can`，再用 `--dry_run` 或零力矩流程；这一步要在 Jetson 上做，可交给 DeepSeek；通过后把本条与 01-K68 的"未在 Jetson 验证"改成已验证。
 
 ---
 
@@ -643,8 +699,9 @@ sim2real/
 │   ├── go2-10/                    go2-10
 │   └── trot1/                     trot1
 ├── sdk/                           达妙动态库
-│   ├── dlls/                      官方版（反馈每约 109 ms 一批）与 Linux `.so`
-│   ├── dlls_lowlatency/           补丁版（批量延迟改为 1 ms，真实延迟未测，无 Linux 版）
+│   ├── dlls/                      官方版（反馈每约 110–120 ms 一批）与 Linux x86-64 `.so`
+│   ├── dlls_linux_aarch64/        Linux aarch64（Jetson）版 `libdm_device.so`，1.x 接口，需要 libusb 1.0.27 以上
+│   ├── dlls_lowlatency/           补丁版（批量延迟改为 1 ms，反馈时龄均值约 7 ms，无 Linux 版）
 │   └── libusb-1.0.dll
 ├── tools/
 │   ├── 0_Return_to_zero.py        8 电机限速安全回零
@@ -664,7 +721,7 @@ sim2real/
 | --- | --- | --- |
 | `quad_leg_xu/bennett_deploy/` | `bennett_deploy/` | 复制后有改动，见 D |
 | `quad_leg_xu/quad_leg_*_deploy.py`（4 个） | 同名，位于本文件夹根 | 只把写死的路径改为打包策略优先、其次 `bennett_rl` 的解析 |
-| `dlls/`、`dlls_lowlatency/`、`libusb-1.0.dll` | `sdk/` | 无改动，`libdm_device.dll` 与原件逐字节相同 |
+| `dlls/`、`dlls_lowlatency/`、`libusb-1.0.dll` | `sdk/` | 无改动，`libdm_device.dll` 与原件逐字节相同；2026-10-20 新增 `dlls_linux_aarch64/` |
 | `0_Return_to_zero.py` | `tools/` | 动态库目录改为 `sdk/` |
 | `dev_sn.py` | `tools/` | 无改动 |
 | `WORKFLOW.md` | `docs/` | 无改动 |
