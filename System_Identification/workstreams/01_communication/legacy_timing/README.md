@@ -54,7 +54,7 @@
 
 ### 文件索引
 
-- 采集脚本：`scripts/probe_feedback_age_1khz.py`（命令流法）、`../01_hardware_inventory/scripts/g0_snapshot.py`（含已废弃的 RTT 法）
+- 采集脚本：`scripts/probe_feedback_age_1khz.py`（命令流法）、`../legacy_hardware/scripts/g0_snapshot.py`（含已废弃的 RTT 法）
 - 原始数据：`data/raw/2026-09-16/20260916_234235_feedback_age_1khz_r01/`
 - 汇总：`data/processed/20260916_234235_feedback_age_1khz_r01/`
 - 图①：`results/figures/fig1_bus_latency.png`

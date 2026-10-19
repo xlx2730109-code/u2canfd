@@ -28,7 +28,7 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WS_ROOT = os.path.dirname(os.path.dirname(HERE))              # .../System Identification/workstreams
-SYSID_ROOT = os.path.dirname(WS_ROOT)                          # .../System Identification
+SYSID_ROOT = os.path.dirname(os.path.dirname(WS_ROOT))                          # .../System Identification
 PARENT = os.path.dirname(SYSID_ROOT)                           # u2canfd (damiao.py 所在)
 sys.path.insert(0, PARENT)
 os.chdir(PARENT)  # dmcan SDK 按相对路径 ./dlls/ 找 DLL, 必须从父目录运行
@@ -76,7 +76,7 @@ def main():
     stamp = datetime.now()
     date_str = stamp.strftime("%Y-%m-%d")
     run_id = stamp.strftime("%Y%m%d_%H%M%S") + "_powered_g0snapshot_r01"
-    out_dir = os.path.join(WS_ROOT, "01_hardware_inventory", "data", "raw", date_str, run_id)
+    out_dir = os.path.join(WS_ROOT, "legacy_hardware", "data", "raw", date_str, run_id)
     os.makedirs(out_dir, exist_ok=True)
     print(f"[+] run_id: {run_id}")
     print(f"[+] 输出: {out_dir}")
@@ -224,7 +224,7 @@ hardware:
   can_map: canid1-2=FL thigh/calf ch0, 3-4=FR ch1, 5-6=RL ch0, 7-8=RR ch1, mst_id=0x10+canid
 software:
   python: {platform.python_version()}
-  script: workstreams/01_hardware_inventory/scripts/g0_snapshot.py
+  script: workstreams/01_communication/legacy_hardware/scripts/g0_snapshot.py
   driver: damiao.py (auto_enable=False)
 data_files:
   frames.csv: 全部RX帧(t_host_mono_ns, ch, can_id, dlc, hex)

@@ -36,7 +36,7 @@ sys.setswitchinterval(0.0005)  # 让 RX 回调线程更快拿到 GIL, 减少量�
 def main():
     stamp = datetime.now()
     run_id = stamp.strftime("%Y%m%d_%H%M%S") + "_feedback_age_1khz_r01"
-    out_dir = os.path.join(WS, "02_timing_latency", "data", "raw", stamp.strftime("%Y-%m-%d"), run_id)
+    out_dir = os.path.join(WS, "legacy_timing", "data", "raw", stamp.strftime("%Y-%m-%d"), run_id)
     os.makedirs(out_dir, exist_ok=True)
     print(f"[+] run_id: {run_id}")
     print("[+] 安全: MIT 帧 kp=0 kd=0 tau=0 (零力矩), 不使能, 不运动")

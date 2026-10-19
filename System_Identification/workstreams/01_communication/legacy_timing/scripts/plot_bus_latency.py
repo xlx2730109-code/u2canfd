@@ -58,7 +58,7 @@ def main():
     if args.run:
         run_dir = args.run
     else:
-        cands = sorted(glob.glob(os.path.join(WS, "02_timing_latency", "data", "raw", "*", "*feedback_age*")))
+        cands = sorted(glob.glob(os.path.join(WS, "legacy_timing", "data", "raw", "*", "*feedback_age*")))
         if not cands:
             print("[!] 没找到 1kHz 探测数据")
             return
@@ -94,7 +94,7 @@ def main():
             "batch_gap_p95_ms": round(float(np.percentile(inter, 95)), 2),
             "batch_gap_max_ms": round(float(inter.max()), 2),
         })
-    proc_dir = os.path.join(WS, "02_timing_latency", "data", "processed", os.path.basename(run_dir))
+    proc_dir = os.path.join(WS, "legacy_timing", "data", "processed", os.path.basename(run_dir))
     os.makedirs(proc_dir, exist_ok=True)
     with open(os.path.join(proc_dir, "bus_latency_summary.csv"), "w", newline="", encoding="utf-8") as f:
         wr = csv.DictWriter(f, fieldnames=list(stats_rows[0].keys()))
@@ -171,7 +171,7 @@ def main():
     style_ax(axB)
     axB.text(-0.13, 1.04, "(b)", fontsize=11, fontweight="bold", transform=axB.transAxes)
 
-    fig_dir = os.path.join(WS, "02_timing_latency", "results", "figures")
+    fig_dir = os.path.join(WS, "legacy_timing", "results", "figures")
     os.makedirs(fig_dir, exist_ok=True)
     out_png = os.path.join(fig_dir, "fig1_bus_latency.png")
     fig.savefig(out_png, dpi=2000)

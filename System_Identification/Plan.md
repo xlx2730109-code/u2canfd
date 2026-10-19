@@ -294,8 +294,8 @@ CMA-ES（自动尝试很多组参数的方法）建议：
 | 工作包 | 负责内容 | 典型输出 |
 |---|---|---|
 | `00_model_chain_sw_urdf_usd` | SW 质量惯量 → URDF → USD → MuJoCo 逐级校核，闭环与足端位置，再到真机称重/质心/惯量 | 逐 link 对表、实测参数 |
-| `01_hardware_inventory` | 电机、固件、寄存器、电源、工装和安全能力 | 设备清单、寄存器快照 |
-| `02_timing_latency` | 发送、接收、反馈有多旧、周期抖动和综合延迟 | 原始事件记录、延迟报告 |
+| `01_communication`（原 01_hardware_inventory） | 电机、固件、寄存器、电源、工装和安全能力 | 设备清单、寄存器快照 |
+| `01_communication`（原 02_timing_latency） | 发送、接收、反馈有多旧、周期抖动和综合延迟 | 原始事件记录、延迟报告 |
 | `03_joint_zero_calibration` | 8 个关节的零位偏差（工装/倾角仪/机械极限法） | 零位偏差表 |
 | `05_motor_datasheet_model` | 从厂家图片读取数据、实现转矩—转速上限和模型 A/B | 曲线模型、检查记录、对比图 |
 | `06_data_acquisition` | 通用记录工具、字段格式、实验身份证和数据检查 | 采集代码、假数据试跑 |

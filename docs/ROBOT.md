@@ -47,12 +47,12 @@
 - 输出端读数就是关节角（1:1，不用乘 6）。
 
 **通信**【已确认】
-- USB2CANFD 双路，CAN-FD，仲裁 1 Mbps，数据 5 Mbps。
+- USB2CANFD 双路，CAN-FD，仲裁 1 Mbps，数据 5 Mbps（部署代码 `dm_can.py` 的设置，CAN FD 与 BRS 都开；用户记得设为 5M；上机时核对设备实际设置）。
 - CAN ID：ch0 = id 1,2,5,6（FL_thigh、FL_calf、RL_thigh、RL_calf），ch1 = id 3,4,7,8（FR、RR）；反馈 ID = 0x10 + 发送 ID。
 - 达妙官方 `libdm_device.dll`（Windows）与 Linux `.so` 里有 100 ms 批量交付常量：反馈每约 109 ms 一批，控制器拿到的角度平均旧约 55 ms。Windows 有补丁版 `dlls_lowlatency/`（改成 1 ms），Linux 未补丁。补丁版的真实延迟**没测过**。
 
 **计算与传感**
-- Jetson（具体型号【未知】，SW 里有 Nano 与 DM-ORIN NX 两种文件）+ 手柄接收器；Windows 电脑与 Jetson 都用于部署；Jetson 联网问题仍在解决【用户确认】。
+- Jetson Nano，Ubuntu 22.04【用户确认，2026-10-19】（原版 Nano 官方只到 Ubuntu 20.04，实际型号可能是 Orin 系列，推测；JetPack 版本未知；SW 里有 Nano 与 DM-ORIN NX 两种文件）+ 手柄接收器；Windows 电脑与 Jetson 都用于部署；Jetson 联网问题仍在解决【用户确认】。
 - IMU：DM-IMU，USB 串口 COM6，921600 baud，约 1000 Hz；reg1 加速度、reg2 角速度（rad/s）、reg3 欧拉角。已做安装倾角标定（倾角 1.13° → 0.72°）。【已确认】
 - 电子部分的更多细节用户说在通信辨识时讲【未知】。
 
@@ -142,6 +142,9 @@
 7. 旧辨识结论里"传输延迟约 0.0–0.2 ms"是被批量交付骗了的结果。
 8. bennett_1 爬行变体对观测滞后敏感：D4 在 100 ms 以内稳，120 ms 时会摔；官方动态库的批量交付最坏约 109 ms（动作延迟另算，训练里还没有）。
 9. bennett_1 爬行变体的后退、侧移速度对地面摩擦敏感（仿真中摩擦越大速度越低），真机地面摩擦未测，实际速度可能低于指令（`bennett_rl/README.md` K58、T34）。
+10. 部署默认 1000 Hz 发令，每帧电机回一帧，每路约 8000 帧/s，CAN FD 下负载约 45–50%，若退回经典 CAN 1 Mbps 接近饱和（推测，待实测）。
+11. 仓库里的 Linux `libdm_device.so` 是 x86-64，Jetson 是 arm64，不能直接加载，需要另找 arm64 版。
+12. 反馈新鲜度用的是主机回调时刻，没有用帧自带时间戳；时间戳含义未验证。
 
 ## 9. 系统辨识
 
@@ -176,7 +179,7 @@
 
 ## 12. 未知与待确认
 
-- 电子部分的细节（Jetson 型号、供电细节、传感器清单）：用户说通信辨识时讲。
+- 电子部分的细节（CAN 盒型号与固件、终端电阻、USB 口分配、供电细节）：用户让我上机时自己读取核对；Jetson 的 JetPack 版本与实际型号未知。
 - 补丁版 DLL 的真实反馈延迟、Linux 上的情况。
 - 电机寄存器 `OC_Value`、`KT_Value` 的含义；`FR_thigh`/`RL_thigh` 寄存器相同的原因。
 - 折算到关节的电枢惯量、摩擦、延迟（执行器辨识要得到）。

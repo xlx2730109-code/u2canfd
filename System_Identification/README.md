@@ -49,8 +49,7 @@ System_Identification/
 ├── references/                # 论文、官网和输入资料来源
 └── workstreams/               # 每类工作各放各的
     ├── 00_model_chain_sw_urdf_usd/ # SW→URDF→USD→MuJoCo 校核 + 真机称重（第一步）
-    ├── 01_hardware_inventory/ # 查清真实硬件和固件
-    ├── 02_timing_latency/     # 测通信周期、抖动和延迟
+    ├── 01_communication/      # 通信辨识（含原 01 硬件清查、原 02 延迟）
     ├── 03_joint_zero_calibration/ # 关节零位标定
     ├── 05_motor_datasheet_model/ # 达妙官方曲线模型
     ├── 06_data_acquisition/   # 统一的数据记录工具

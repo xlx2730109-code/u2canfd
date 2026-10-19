@@ -63,7 +63,7 @@ def onset(t, y, frac=0.1):
 def load_step():
     """本会话实测台阶: 07 工作包最新一次 FL_thigh 台阶运行的 command.csv + feedback.csv."""
     cands = sorted(glob.glob(os.path.join(
-        WS, "07_actuator_identification", "data", "raw", "*", "*step_FL_thigh*")))
+        os.path.dirname(WS), "07_actuator_identification", "data", "raw", "*", "*step_FL_thigh*")))
     if not cands:
         raise FileNotFoundError("没有找到 step_FL_thigh 台阶数据, 先跑 "
                                 "07_actuator_identification/scripts/step_single.py")
@@ -87,7 +87,7 @@ def load_step():
 def load_probe():
     """1kHz 探测: 返回 (tx 时刻列表, FL_thigh RX 时刻列表, 批间隔中位 ms)."""
     cands = sorted(glob.glob(os.path.join(
-        WS, "02_timing_latency", "data", "raw", "*", "*feedback_age*")))
+        WS, "legacy_timing", "data", "raw", "*", "*feedback_age*")))
     run = cands[-1]
     by = collections.defaultdict(list)
     tx = []
@@ -199,7 +199,7 @@ def main():
     axB.text(-0.02, 1.06, "(b)", fontsize=11, fontweight="bold",
              transform=axB.transAxes)
 
-    fig_dir = os.path.join(WS, "02_timing_latency", "results", "figures")
+    fig_dir = os.path.join(WS, "legacy_timing", "results", "figures")
     os.makedirs(fig_dir, exist_ok=True)
     out = os.path.join(fig_dir, "fig1b_latency_shift.png")
     fig.savefig(out, dpi=2000)

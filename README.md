@@ -1,12 +1,12 @@
 # 系统辨识总览
 
-目标：让强化学习策略从仿真迁移到样机时差距尽量小。每个工作包一个一级标题（标题即文件夹路径），下含「基准与结论」「已完成」「待完成」。00 包的结论编号沿用 K1–K29，之后新包的编号带包号，如 `02-K1`。总计划见 `System_Identification/Plan.md`。
+目标：让强化学习策略从仿真迁移到样机时差距尽量小。每个工作包一个一级标题（标题即文件夹路径），下含「基准与结论」「已完成」「待完成」。00 包的结论编号沿用 K1–K29，之后新包的编号带包号，如 `01-K1`。总计划见 `System_Identification/Plan.md`。
 
 | 工作包 | 作用 | 状态 |
 |---|---|---|
 | 00 模型链校核 | SW → URDF → USD → MuJoCo 与整机称重对齐 | 已收尾（2026-10-15） |
-| 02 通信、周期、延迟 | 测反馈周期与延迟 | 下一个 |
-| 01、03、05、06、07、08、11 | 硬件清查、零位、电机曲线、数据记录、执行器、传感器、训练部署 | 未开始，开始时在本文件新增一节 |
+| 01 通信辨识 | 测反馈周期、控制节拍、观测新鲜度，给训练的延迟随机化定范围 | 方案已定（2026-10-19），未采集 |
+| 03、05、06、07、08、11 | 零位、电机曲线、数据记录、执行器、传感器、训练部署 | 未开始，开始时在本文件新增一节 |
 | sim2real 部署 | 部署运行库、动态库、工具与 bennett_1 的策略入口（Windows、Linux） | 进行中（2026-10-17）：T9、S1 入口已写好，待真机试验 |
 
 # System_Identification/workstreams/00_model_chain_sw_urdf_usd
@@ -262,6 +262,151 @@ SW 质量覆盖的 7 种零件：
   改模型的流程：改 URDF → 重新生成 USD 与 MJCF → 再对表；MuJoCo 的改动先在副本上做，并做动态验证。
 
 
+
+---
+
+# System_Identification/workstreams/01_communication
+
+目标：测出部署时策略拿到的观测有多旧、动作多久发出，为训练的延迟随机化提供范围（对应 `bennett_rl/README.md` 的 T4a、T4e）。
+
+## 基准与结论
+
+### A. 链路总览
+
+| 环节 | 内容 |
+| --- | --- |
+| 上位机 | Windows 电脑，或 Jetson Nano（Ubuntu 22.04，用户确认；JetPack 版本未知） |
+| 电机链路 | 上位机 → USB-C → USB2CANFD 双路盒 → CAN1：id 1、2、5、6；CAN2：id 3、4、7、8 → 8 × DM-J8006-2EC |
+| IMU | DM-IMU，USB 串口，921600 baud，约 1000 Hz |
+| 手柄 | ROS 手柄接收器，USB |
+| 供电 | 6S 锂电 → 开关 → XT60 → 分电板 → 电机；降压模块 → Jetson 12 V |
+| 电机动态库 | Windows：官方 `libdm_device.dll`（缺省）与补丁版 `dlls_lowlatency/`；Linux：`libdm_device.so`（官方，未补丁） |
+
+### B. 部署端实际负载与配置
+
+| 项目 | 值 | 来源 |
+| --- | --- | --- |
+| 发令环 | 缺省 1000 Hz，每圈给每个活动电机发一帧 | `runtime.py` 的 `control_rate_hz` |
+| 策略环 | 50 Hz | `contract` |
+| 命令帧 | MIT 模式，8 字节 | `dm_can.py` 的 `control_mit` |
+| 帧类型与速率 | CAN FD，BRS 开，仲裁段 1 Mbps、数据段 5 Mbps | `dm_can.py` 第 764–765 行 |
+| 反馈 | 电机每收到一帧命令回一帧 | 旧实测（`LEGACY.md`）与社区驱动说明 |
+| 每路帧率 | 约 4000 命令 + 4000 反馈 = 8000 帧/s | 计算 |
+| 反馈时刻的记法 | 回调里记主机时间 `last_time_`，没有用帧自带的 `timestamp` | `dm_can.py` 的 `canframeCallback` |
+| 观测低通 | 关节速度与 IMU 各 12 Hz 一阶，时间常数约 13 ms | `runtime.py` |
+| Linux 库 | `sim2real/sdk/dlls/libdm_device.so` 是 x86-64 | `file` 命令 |
+| Python 绑定 | `dmcan-sdk` 1.0.4，要求 Python ≥ 3.13；Windows 靠加入 Python313 的 user-site 绕过 | `dm_can.py` |
+
+旧实测（2026-09-16，官方 DLL，1 kHz 命令流，零力矩）：
+
+| 指标 | 数值 |
+| --- | --- |
+| 每关节反馈频率 | 126 Hz，无丢失 |
+| 批内帧间隔 | 约 0.05 ms |
+| 批间隔 p50 / 最大 | 108.7 ms / 110.7 ms，8 个关节一致 |
+
+01-K1：旧实测数据来自官方 DLL，只作线索，不进新数据集（`legacy_timing/data/LEGACY.md`）。
+01-K2：每路约 8000 帧/s。CAN FD（1M / 5M）一帧约 55–65 µs，负载约 45–50%；若实际退回经典 CAN 1 Mbps，一帧约 110 µs，负载约 90%（推测，需实测）。
+01-K3：用户记得速率设为 5M，部署代码里是仲裁 1M、数据 5M，两者大概率指同一设置（推测）；上机时读取设备实际设置核对。
+01-K4：当前"反馈新鲜度"是主机回调时刻，包含驱动的批量交付；帧自带 `timestamp` 的单位和含义未验证，验证后才能区分 USB 批量交付与总线时间。
+01-K5：Linux `.so` 是 x86-64，Jetson 是 arm64，不能直接加载；需要从达妙 `dmBots/dm-tools` 找 arm64 版。
+01-K6：Jetson 为 Nano、Ubuntu 22.04 由用户确认；原版 Nano 官方只到 Ubuntu 20.04，实际型号可能是 Orin 系列（推测）。
+01-K7：12 Hz 低通是主动滤波，不算通信延迟，两者分开记录。
+01-K8：没有查到达妙对"109 ms 批量延迟"或"补丁后 1 ms"的官方说明，只能以实测为准。
+01-K9："不使能"不等于不改变设备状态：构造时会设置 CAN 通道波特率，关闭时会发失能命令；运行前要审查初始化与退出流程。
+01-K10：没有外部基准（示波器、逻辑分析仪）测不出绝对延迟，主机侧测量只给下限；端到端延迟（指令到关节动作）留给 07 执行器辨识。
+01-K11：`Motor_Control` 缺省 `set_baudrate=True`，会把盒子两路的波特率与采样点改写成 1 M / 5 M / 0.75；缺省 `auto_enable=True`，会使能电机（切模式加 0xFC 各 5 次）。测量脚本必须传 `set_baudrate=False`、`auto_enable=False`。
+01-K12：`close()` 一定会给每个电机发 5 次失能帧（0xFD）并关闭通道，Windows 上不关设备（避免挂死）。测试时不能有别的控制程序在驱动同一个盒子；对未使能电机发失能帧应无影响（推测）。
+01-K13：SDK 提供 `get_channel_baudrate` 和 `get_version`，只读设备，可用来核对 CAN 实际速率与固件版本；接收帧头有设备时间戳 `timestamp`（64 位），部署代码和旧探测脚本都没有使用。
+01-K14：旧探测脚本通过根目录 `damiao.py` 只加载官方 DLL；在回调第一行用 `perf_counter_ns` 记时，包含驱动的批量交付；1 kHz 发令靠 `time.sleep`，实际发令节拍没有记录，需要在新实验里记。
+
+### C. 方案
+
+| 步骤 | 内容 | 是否使能电机 |
+| --- | --- | --- |
+| A 准备 | 审查初始化与退出流程；验证帧 `timestamp`；核对 CAN 实际速率与 CAN FD 开关；找 arm64 SDK | 否 |
+| B 电机通信性能 | 按真实 1 kHz、8 电机负载，记录反馈周期、抖动、8 电机时间差、丢帧、错误、总线负载；Windows 官方库与补丁库对比，再到 Jetson 重复 | 否（零力矩空命令） |
+| C 控制程序节拍 | 发令环与策略环的实际周期、超时；单独运行，以及加入推理、IMU、日志后的变化 | 否 |
+| D 观测新鲜度 | 策略取观测时，每个关节和 IMU 最新数据有多旧，各路是否相差太多 | 否 |
+| 输出 | 观测滞后与动作滞后的分布，折成策略步（20 ms）和物理步（5 ms） | — |
+
+每档先测 10–30 s，发现问题再加对照。采集时不在同一台电脑上跑训练；每次记录电池、DLL profile 与 SHA256（见 `System_Identification/docs/DATA_CONTRACT.md`）。
+
+不做：
+- 手拨腿对齐 IMU 与编码器的精确延迟，只看数据率和新鲜度。
+- 指令到动作的阶跃延迟，归 07。
+- 使能后的掉线与 `TIMEOUT` 行为试验，以后单独评估；现在只审查配置与软件超时逻辑。
+- 单独的请求—反馈往返时间，只作电机通信性能的可选诊断（旧版本因批量交付干扰已废弃）。
+
+### D. 文件夹架构
+
+`01_communication/` 自成一体：新采集按 A 至 D 四个步骤分文件夹，旧一轮（官方 DLL 时期）的数据与脚本放在 `legacy_*`，只作线索。
+
+```text
+01_communication/
+├── A_prep/                 准备：设备信息、初始化审查、帧时间戳验证、CAN 速率核对
+│   ├── results/            审查与核对记录
+│   └── scripts/            读设备信息的脚本
+├── B_motor_comm/           电机通信性能：反馈周期、抖动、8 电机时间差、丢帧、总线负载
+│   ├── data/raw/           原始数据，按 日期/实验名 存放
+│   ├── results/            汇总表、图
+│   └── scripts/            采集与分析脚本
+├── C_loop_timing/          控制程序节拍：发令环与策略环的实际周期、超时（结构同 B）
+├── D_obs_freshness/        观测新鲜度：策略取观测时关节与 IMU 数据有多旧（结构同 B）
+├── legacy_hardware/        2026-09-16 的寄存器快照（原 01_hardware_inventory）
+│   ├── data/               raw：两次不使能读寄存器的原始数据，manifest.yaml 为实验身份证
+│   ├── scripts/            g0_snapshot.py：不使能读取各电机寄存器
+│   └── README.md           旧笔记
+├── legacy_timing/          2026-09-16 的通信延迟实测（原 02_timing_latency）
+│   ├── data/               raw、processed：1 kHz 命令流探测；LEGACY.md 说明为何不进新数据集
+│   ├── results/            figures：fig1_bus_latency.png、fig1b_latency_shift.png
+│   ├── scripts/            probe_feedback_age_1khz.py（探测）、plot_bus_latency.py、plot_shift_demo.py（作图）
+│   └── README.md           旧笔记，含当时的测法与结论
+└── references/             资料
+    ├── 硬件/               控制与接线设计图、硬件系统集成图
+    └── 调研要点.md         Codex 与自行调研的要点和来源
+```
+
+文件夹之外的相关文件：
+
+```text
+sim2real/bennett_deploy/dm_can.py                         电机驱动封装：MIT 命令帧、反馈回调、波特率设置
+sim2real/bennett_deploy/runtime.py                        部署主循环：1 kHz 发令环、50 Hz 策略环、12 Hz 低通
+sim2real/bennett_deploy/imu.py                            DM-IMU 串口读取
+sim2real/sdk/dlls/                                        官方 libdm_device：Windows 的 .dll、Linux 的 .so（x86-64）
+sim2real/sdk/dlls_lowlatency/                             补丁版 Windows DLL（批量间隔改为 1 ms）
+System_Identification/docs/DATA_CONTRACT.md               数据记录规则：实验身份证、命名、记录字段
+System_Identification/docs/HARDWARE_SAFETY_CHECKLIST.md   上机前的安全检查清单
+docs/ROBOT.md                                             机器人总览
+```
+
+新数据放各主题文件夹的 `data/raw/日期/实验名/`，实验名按 `DATA_CONTRACT.md` 命名。空文件夹 git 不会同步，有文件后才会出现在另一台电脑上。
+
+### E. 调研依据
+
+资料见 `System_Identification/workstreams/01_communication/references/调研要点.md`。要点：文献通常在台架上测指令到首个响应，取最小与最大值，作为仿真延迟缓冲的范围；观测延迟与动作延迟分开设置；PACE 把延迟作为全局参数拟合，单驱动通信延迟按可忽略处理。
+
+## 已完成
+
+- [X]  2026-10-19 读两张硬件图（控制与接线、硬件系统集成），明确通信链路与 USB 设备（A）。
+- [X]  2026-10-19 核对部署代码的发令率、帧类型、反馈记时方式与 Linux 库架构（B、01-K2 至 01-K5）。
+- [X]  2026-10-19 审阅 Codex 的调研，并自行查资料（达妙官方仓库、`dmcan-sdk`、文献），定下方案（C、D）；纠正了"每路 4 电机、50 Hz，总线负载很小"的判断。
+- [X]  2026-10-19 清理 `00_…` 与原 `01_…`、`02_…` 下的空文件夹与占位文件。
+- [X]  2026-10-19 读 SDK 初始化与退出流程、旧探测脚本和 `dmcan` 接口（01-K11 至 01-K14）；只读代码，没有连设备。
+- [X]  2026-10-19 通信辨识定为 01 号包：原 `01_hardware_inventory`、`02_timing_latency` 并入 `01_communication/`，旧数据与脚本移入 `legacy_hardware/`、`legacy_timing/`，硬件图移入 `references/硬件/`；旧脚本里的路径已改，语法检查通过，没有重跑；新建 `A_prep/`、`B_motor_comm/`、`C_loop_timing/`、`D_obs_freshness/`。
+
+## 待完成
+
+按顺序做。每一步完成后把结论写进「基准与结论」。
+
+- [ ]  01-T1 读设备信息：接电不使能，只调用 `get_version`、`get_channel_baudrate`，核对固件版本与 CAN 实际速率、帧类型；记录 USB 口与 CAN 盒型号。卡在：需要上机。
+- [ ]  01-T2 基线复现：Windows 官方库，沿用旧探测同款的零力矩 1 kHz 命令流，加记帧 `timestamp` 与实际发令节拍，确认 109 ms 批量是否复现、`timestamp` 的单位与含义。卡在：需要你同意发零力矩帧，并停掉训练。
+- [ ]  01-T3 补丁库同测：同样条件换补丁版 DLL，对比批间隔与帧到达分布。
+- [ ]  01-T4 控制程序节拍：发令环与策略环的实际周期、超时，单独运行与加入推理、IMU、日志后的变化。
+- [ ]  01-T5 观测新鲜度：策略取观测时，每个关节和 IMU 最新数据有多旧，各路是否相差太多。
+- [ ]  01-T6 Jetson：找 arm64 SDK，重复 T2 至 T5；卡在 01-K5。
+- [ ]  01-T7 把结果折成策略步，写进 `bennett_rl/README.md` 的 T4a、T4e，并更新 `docs/ROBOT.md`。
+- [ ]  01-T8 审查电机 `TIMEOUT` 配置与软件反馈超时（现为 0.5 s，对 109 ms 批量交付不起作用）。
 
 ---
 
