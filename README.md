@@ -5,7 +5,7 @@
 | 工作包 | 作用 | 状态 |
 |---|---|---|
 | 00 模型链校核 | SW → URDF → USD → MuJoCo 与整机称重对齐 | 已收尾（2026-10-15） |
-| 01 通信辨识 | 测反馈周期、控制节拍、观测新鲜度，给训练的延迟随机化定范围 | 方案已定（2026-10-19），未采集 |
+| 01 通信辨识 | 测反馈周期、控制节拍、观测新鲜度，给训练的延迟随机化定范围 | 进行中：Windows 电机通信性能已测（2026-10-19），待测节拍、IMU、Jetson |
 | 03、05、06、07、08、11 | 零位、电机曲线、数据记录、执行器、传感器、训练部署 | 未开始，开始时在本文件新增一节 |
 | sim2real 部署 | 部署运行库、动态库、工具与 bennett_1 的策略入口（Windows、Linux） | 进行中（2026-10-17）：T9、S1 入口已写好，待真机试验 |
 
@@ -275,7 +275,8 @@ SW 质量覆盖的 7 种零件：
 
 | 环节 | 内容 |
 | --- | --- |
-| 上位机 | Windows 电脑，或 Jetson Nano（Ubuntu 22.04，用户确认；JetPack 版本未知） |
+| 上位机 | Windows 电脑，或 Jetson Orin Nano Super 开发套件（JetPack 6.2，Ubuntu 22.04.5，aarch64，Python 3.10.12） |
+| USB2CANFD 盒 | DM-USB2FDCAN Dual，固件 `dual_app v1.0.0.7`，序列号 `D6977F56…`；Windows 里为 COM7 与一个 WinUSB 接口 |
 | 电机链路 | 上位机 → USB-C → USB2CANFD 双路盒 → CAN1：id 1、2、5、6；CAN2：id 3、4、7、8 → 8 × DM-J8006-2EC |
 | IMU | DM-IMU，USB 串口，921600 baud，约 1000 Hz |
 | 手柄 | ROS 手柄接收器，USB |
@@ -307,10 +308,10 @@ SW 质量覆盖的 7 种零件：
 
 01-K1：旧实测数据来自官方 DLL，只作线索，不进新数据集（`legacy_timing/data/LEGACY.md`）。
 01-K2：每路约 8000 帧/s。CAN FD（1M / 5M）一帧约 55–65 µs，负载约 45–50%；若实际退回经典 CAN 1 Mbps，一帧约 110 µs，负载约 90%（推测，需实测）。
-01-K3：用户记得速率设为 5M，部署代码里是仲裁 1M、数据 5M，两者大概率指同一设置（推测）；上机时读取设备实际设置核对。
+01-K3：2026-10-19 在 Windows 读取盒子当前设置（官方库与补丁库读到相同，未改动任何设置）：ch0 为经典 CAN，1 Mbps，无数据段；ch1 为 CAN FD，仲裁 1 Mbps、数据 5 Mbps；采样点均 0.75；固件 `dual_app v1.0.0.7`；序列号与 9 月一致。部署代码启动时会把两路都改写成 CAN FD 1 M / 5 M（01-K11），所以这是上次使用后留下的设置，或盒子上电的默认值（未验证）；用户记得的 5M 与 Codex 说的 1M 可能分别对应 ch1 与 ch0（推测）。结果：`A_prep/results/20261019_102833_*_device_info.json`。
 01-K4：当前"反馈新鲜度"是主机回调时刻，包含驱动的批量交付；帧自带 `timestamp` 的单位和含义未验证，验证后才能区分 USB 批量交付与总线时间。
 01-K5：Linux `.so` 是 x86-64，Jetson 是 arm64，不能直接加载；需要从达妙 `dmBots/dm-tools` 找 arm64 版。
-01-K6：Jetson 为 Nano、Ubuntu 22.04 由用户确认；原版 Nano 官方只到 Ubuntu 20.04，实际型号可能是 Orin 系列（推测）。
+01-K6：2026-10-19 经 USB 设备模式（192.168.55.1）SSH 登录 Jetson 核实：NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super，不是原版 Nano；Ubuntu 22.04.5，L4T R36.4.3，aarch64，Python 3.10.12；登录账户 claude-lab，无 sudo，只在 dialout 组。当时 USB 上有 DM-IMU-L1（`/dev/ttyACM0`）、键盘、鼠标、蓝牙，没有 USB2CANFD 盒。
 01-K7：12 Hz 低通是主动滤波，不算通信延迟，两者分开记录。
 01-K8：没有查到达妙对"109 ms 批量延迟"或"补丁后 1 ms"的官方说明，只能以实测为准。
 01-K9："不使能"不等于不改变设备状态：构造时会设置 CAN 通道波特率，关闭时会发失能命令；运行前要审查初始化与退出流程。
@@ -320,7 +321,85 @@ SW 质量覆盖的 7 种零件：
 01-K13：SDK 提供 `get_channel_baudrate` 和 `get_version`，只读设备，可用来核对 CAN 实际速率与固件版本；接收帧头有设备时间戳 `timestamp`（64 位），部署代码和旧探测脚本都没有使用。
 01-K14：旧探测脚本通过根目录 `damiao.py` 只加载官方 DLL；在回调第一行用 `perf_counter_ns` 记时，包含驱动的批量交付；1 kHz 发令靠 `time.sleep`，实际发令节拍没有记录，需要在新实验里记。
 
-### C. 方案
+### C. 实测：电机通信性能（Windows，2026-10-19）
+
+条件：两路 CAN FD 1 M / 5 M，每个发令周期（1 ms）给 8 个电机各发一帧零力矩 MIT 帧（8000 帧/s，与部署负载相同），30 s，电机失能；官方库与补丁库各 2 次。数据在 `B_motor_comm/data/raw/2026-10-19/`，汇总在 `data/processed/` 下对应目录的 `summary.json`（raw 只放原始数据）。
+
+| 指标 | 官方 r01 | 官方 r02 | 补丁 r01 | 补丁 r02 |
+| --- | ---: | ---: | ---: | ---: |
+| 反馈到达批间隔 p50 / ms | 122.2 | 116.0 | 15.5 | 15.5 |
+| 反馈到达批间隔 最大 / ms | 135 | 134 | 36.8 | 35.2 |
+| 每批帧数 p50 | 976 | 930 | 126 | 125 |
+| 反馈时龄 均值 / ms | 50.9 | 50.1 | 7.9 | 8.9 |
+| 反馈时龄 p99 / ms | 112 | 111 | 24.8 | 25.9 |
+| 反馈时龄 最大 / ms | 123.7 | 122.4 | 30.3 | 29.6 |
+| 发令周期 均值 / ms | 1.00 | 1.00 | 1.00 | 1.00 |
+| 发令周期 p99 / ms | 1.74 | 1.76 | 1.72 | 1.70 |
+| 发令周期 最大 / ms | 15.3 | 15.6 | 29.8 | 14.0 |
+| 周期超过 5 ms 的次数 | 20 | 11 | 18 | 13 |
+| 单次发送调用 最大 / ms | 10.8 | 9.3 | 11.3 | 6.9 |
+| 发送失败帧数 | 0 | 0 | 0 | 0 |
+
+加 `timeBeginPeriod(1)`（部署程序启动时同样调用；`--timer_1ms`）后再测，各 1 次（r03）：
+
+| 指标 | 官方 | 官方 + 1 ms 定时器 | 补丁 | 补丁 + 1 ms 定时器 |
+| --- | ---: | ---: | ---: | ---: |
+| 反馈到达批间隔 p50 / ms | 122.2 | 108.2 | 15.5 | 15.6 |
+| 反馈到达批间隔 最大 / ms | 135 | 124 | 36.8 | 20.4 |
+| 反馈时龄 均值 / ms | 50.9 | 47.3 | 7.9 | 6.9 |
+| 反馈时龄 p99 / ms | 112 | 104 | 24.8 | 15.1 |
+| 反馈时龄 最大 / ms | 123.7 | 112.9 | 30.3 | 15.8 |
+| 发令周期 p99 / ms | 1.74 | 1.64 | 1.72 | 1.67 |
+| 周期超过 2 ms 的次数 | 178 | 84 | 154 | 63 |
+| 单次发送调用 最大 / ms | 10.8 | 9.7 | 11.3 | 8.6 |
+
+部署同款环境（`env_isaaclab` 的 Python 3.11，补丁库，1 ms 定时器）下，在发令环里每 20 ms 做一次 `bennett_1_crawl_T9` 的 CPU 推理（`--policy`，30 s × 2，数据在 `C_loop_timing/data/raw/2026-10-19/`）：
+
+| 指标 | 无策略 | 有策略 r06 | 有策略 r07 |
+| --- | ---: | ---: | ---: |
+| 单次推理 均值 / ms | — | 0.33 | 0.32 |
+| 单次推理 p99 / ms | — | 0.63 | 0.58 |
+| 单次推理 最大 / ms | — | 3.9 | 4.7 |
+| 发令周期 p99 / ms | 1.67 | 1.69 | 1.65 |
+| 发令周期 最大 / ms | 39.2 | 34.8 | 22.0 |
+| 周期超过 5 ms 的次数 | 27 | 9 | 5 |
+| 策略 tick 处反馈时龄 均值 / ms（perf_counter） | — | 6.6 | — |
+| 策略 tick 处反馈时龄 p99 / ms | — | 14.3 | — |
+
+反馈时龄指每个发令周期开始时，各电机最近一次反馈已经到达主机多久（主机时间）。
+
+01-K24：测量条件如上；同一库两次结果一致，两库之间差异远大于两次之间的差异。
+01-K25：没有丢帧：每个库每次发送 24 万帧，发送失败 0，每个电机反馈 1000 Hz，与命令一一对应；所有反馈帧都是 CAN FD 且 BRS 为 1、`esi` 为 0。总线负载没有直接测。
+01-K26：官方库在 8000 帧/s 下，反馈批间隔 116–122 ms（轻负载 1000 帧/s 时为 109 ms），每批约 930–976 帧；控制器看到的反馈时龄均值约 50 ms，p99 约 111 ms，最大约 124 ms。
+01-K27：补丁库把批间隔从约 120 ms 降到约 15.5 ms（最大约 37 ms），每批约 126 帧；反馈时龄均值 8–9 ms，p99 约 25 ms，最大约 30 ms。批间隔没有降到 1 ms，原因已查明，见 01-K36、01-K37。
+01-K28：按策略步 20 ms 折算：官方库反馈时龄平均约 2.5 步、最大约 6 步；补丁库平均约 0.4 步、最大约 1.5 步；部署同款（补丁库加 1 ms 定时器）均值约 7 ms、p99 约 15 ms、最大约 16 ms，即平均约 0.35 步、最大约 0.8 步。以上只含主机侧，不含电机内部采样与 CAN 总线，也不含动作从发出到电机生效的延迟（那部分要 07 的阶跃实验）。`bennett_1` 爬行变体 D4 在 100 ms 以内稳、120 ms 失效，官方库的最大时龄已超出；用户运行策略时一直加 `--dm_sdk_profile low_latency`，即补丁库。
+01-K29：1000 Hz 发令环平均周期 1.00 ms，p99 约 1.7 ms；每 30 s 有 11–20 次周期超过 5 ms，最大 14–30 ms，来自发送调用的偶发阻塞（单次最长 6.9–11.3 ms），两个库相同，原因未查。
+01-K30：帧头设备时间戳的单位是 ns（单个电机相邻反馈的设备时间间隔中位数 1.01–1.04 ms）；但约每秒向前跳 3.3 s（整段跨度是主机的约 4.1 倍），批量交付时还有回退，所以不能用它推交付滞后，也不能按 1 ms 分箱算 8 个电机的时间差。原先的“交付滞后”数字（官方约 67–70 ms、补丁约 25 ms）和“8 个电机跨度约 0.54 ms”已撤回（01-K46）。
+01-K31：盒子刚接入后的第一次运行，状态查询没有任何应答，脚本按设计中止，没有发送零力矩帧；其后所有运行第一次查询就 8 个电机全部应答，状态码均为失能。原因未查明（未验证：首次需要等待）。
+01-K32：每次测量会把 ch0 写成 CAN FD；测完用 `A_prep/scripts/restore_channel_settings.py` 恢复成测量前的设置（ch0 经典 CAN 1 Mbps，ch1 CAN FD 1 M / 5 M）并读回核对一致，盒子设置与测量前相同。
+01-K33：补丁库的批间隔在加 1 ms 定时器后仍是 15.6 ms，说明"没调 `timeBeginPeriod`"不是原因；官方库 122 ms 降到 108 ms，更接近"100 ms 常量加余量"。加 1 ms 定时器明显压低补丁库的尾部（时龄最大 30 ms 降到 16 ms，周期超 2 ms 的次数减半）。补丁库 15.6 ms 的来源见 01-K36、01-K37。
+01-K34：合理性核对：①设备时间戳里相邻两帧的间隔约 0.1–0.12 ms，与 CAN FD 1 M / 5 M 下一发一收约 120 µs 相符；②官方库批间隔 108–122 ms 与已知的 100 ms 常量相符；③时龄均值约为批间隔的一半，符合"批内帧同时到达"；④无丢帧、无发送失败。资料侧：Windows 默认定时器精度为 15.625 ms，libusb 批量传输本身通常在 2 ms 以内，所以几十毫秒的量级来自主机侧定时或适配器固件的批量刷新，与本测量方向一致；没有找到针对 DM USB2CANFD 的专门资料。
+01-K35：本测量的局限：①只有主机时间，没有示波器或逻辑分析仪，不能验证绝对延迟；②只测了 Windows、机器人静止、失能；③电机内部从采样到回复的延迟未知；④设备时间戳约每秒前跳 3.3 s，不能用来估计交付滞后（01-K46）。
+01-K36：批交付的来源（读 `libdm_device.dll` 反汇编）：两个 DLL 只有 4 个字节不同，在文件偏移 `0x7F11`，是一条 `mov edx, imm32` 的立即数，作为 `std::this_thread::sleep_for` 的纳秒数传入：官方 `0x05F5E100`（100 ms），补丁 `0x000F4240`（1 ms）。该睡眠位于一个循环里，官方库的批间隔约为 100 ms 加余量，补丁库约 15.6 ms，都与这个睡眠吻合；该线程负责把收到的帧交给回调（由批间隔与睡眠时长吻合推断，推测）。DLL 里另有 `libusb_handle_events_timeout_completed`，其超时是全局变量 `{0 s, 100000 µs}`（100 ms，补丁没有改它，只在有事件时才返回，不是周期延迟）和一处 `sleep_for(10 ms)`（所在线程的作用未查，未验证）。
+01-K37：补丁库 15.6 ms 的原因（直接验证，`B_motor_comm/scripts/probe_sleep_for.py`）：DLL 用的是 MinGW 的 `std::this_thread::sleep_for`，底层是 `libwinpthread` 的 `nanosleep`。实测睡 1 ms 实际中位约 15.2 ms，睡 2 ms 约 15.2 ms，睡 10 ms 约 16.5 ms，睡 16 ms 约 25 ms；加 `timeBeginPeriod(1)` 后仍是 15.6 / 15.6 / 20 / 30 ms；但睡不足 1 ms（0、1 µs、100 µs、500 µs）几乎立即返回。同一进程里 `kernel32.Sleep(1)` 初始约 5.8 ms，加 `timeBeginPeriod(1)` 后约 2.0 ms，所以定时器本身有效，问题在 winpthreads 的睡眠实现。结论：补丁库的"1 ms"在 Windows 上实际睡约 15 ms，这就是 15.6 ms 批间隔的来源。
+01-K38：试验（临时目录里的 DLL 副本，不动 `sim2real/sdk`，`B_motor_comm/scripts/make_test_dll.py` 可复现）：以官方 DLL 为底，把睡眠常量改成 0.5 ms（睡不足 1 ms 即不睡），加 `timeBeginPeriod(1)`，零力矩 1 kHz × 8 电机 30 s：反馈时龄均值 0.59 ms、p99 1.35 ms、最大 4.8 ms，无丢帧；代价是进程 CPU 约 1.43 个核（补丁库约 0.40 个核），即多约 1 个核在空转。时龄比补丁库低一个数量级，但要换 DLL 且多占一个核，是否采用由用户决定，未部署。
+01-K39：Linux `libdm_device.so`（x86-64）里有同样的三个常量：100000（µs）、100 000 000 ns、10 000 000 ns，在只读数据 `0x13618`、`0x13628`、`0x13638`；Linux 的 `nanosleep` 精确，按 K36 的机制，改成 1 ms 后批间隔应约 1 ms（推测，未测）。仓库里没有补丁版 `.so`，Jetson 还需要 arm64 版（01-K5），同样的常量要在 arm64 版里重新找。
+01-K40：命令发送是同步的：`send_can` 在调用线程里直接调用 `libusb_bulk_transfer`（超时 500 ms），单次调用中位数约 75–85 µs；设备时间戳显示同一电机的反馈在设备侧每约 1 ms 一帧，说明命令是均匀到达总线的，没有 10–15 ms 的发送批量；发送调用偶发的 7–11 ms 阻塞（01-K29）原因未查。
+01-K42：部署环境（`env_isaaclab`，Python 3.11，torch 2.7.0 CPU，14 线程）下，T9 策略单次推理中位约 0.31 ms，p99 约 0.6 ms，最大 3.9–4.7 ms（每次 1500 次），相对 20 ms 策略步可以忽略。
+01-K43：在发令环里加入每 20 ms 一次的推理（与部署一样是单线程），发令周期均值仍为 1.00 ms，p99 为 1.65–1.69 ms，与无策略（1.67 ms）无差别；周期超过 5 ms 的次数没有增加；周期最大 22–39 ms 三种情况都出现，不是推理造成（原因未查，见 01-K29）。
+01-K44：Python 3.11 在 Windows 上 `time.monotonic()` 的分辨率约 15.6 ms（实测步长 15–16 ms；官方文档与 PEP 418 都说明 3.13 之前用 `GetTickCount64`，3.13 起改用 `QueryPerformanceCounter`）。`dm_can.py` 的 `Motor.last_time_` 与部署的 `feedback_age_s` 都用它，所以部署日志里的反馈时龄只有 0 或 16 ms 两档，不能反映真实时龄；用 `perf_counter` 重算，策略 tick 处反馈时龄均值 6.6 ms、p99 14.3 ms，与 01-K27 一致。它只影响日志与超时判断的精度，策略用的是关节位置，不是时龄。
+01-K45：部署入口缺省用官方库（DeepSeek 复核 I1，核实属实）：`runtime.py` 的 `--dm_sdk_profile` 缺省是 `original`，各部署入口都不传参，环境变量还会被它覆盖；用户一直手动加 `--dm_sdk_profile low_latency`。已改为缺省 Windows 用 `low_latency`、Linux 用 `original`（`DEFAULT_DM_SDK_PROFILE`），`--check_only` 打印的库为 `low_latency`，`--dm_sdk_profile original` 仍可用；`bennett_deploy.tests` 12 项通过（1 项跳过）。改动前的备份在 `E:/HuanCun/AI_tmp/Claude/deploy_clock_fix_20261019/`。
+01-K46：设备时间戳每秒约向前跳一次 3.3 s（DeepSeek 复核 I2，用数据核实：整段跨度是主机的约 4.1 倍），所以"交付滞后"与"8 个电机的设备时间跨度"两项作废，只保留主机侧口径的反馈时龄；设备侧延迟要等有可用时间戳（SDK 2.x 或内核时间戳）再测。分析脚本已改为这两项输出 `null` 并附说明，`summary.json` 改写到 `data/processed/`，旧版移为 `summary_v1_withdrawn.json`。
+01-K47：发送调用偶发的 7–11 ms 阻塞，原因未明。DeepSeek 假设是垃圾回收，对照试验（`--no_gc`）否定：关 GC 与不关 GC 的最大发送耗时 7.5 与 7.0 ms，超过 1 ms 的次数 1094 与 1132；也没有批突发期间 GIL 争用的证据（超过 3 ms 的 10 次发送中 30% 落在批突发区间，随机期望约 26%，样本小）。
+01-K48：部署时钟修复已验证：把 `dm_can.py`、`imu.py`、`runtime.py` 的 14 处 `time.monotonic()` 换成 `time.perf_counter()` 后，用部署的 `last_time_` 口径算的反馈时龄（均值 6.82 ms、p99 14.9 ms）与按 `frames.csv` 的 `perf_counter` 到达时刻算的结果逐 tick 相差不超过 0.1 ms；策略调度间隔回到 20.00 ms（p99 21.2 ms），此前部署式调度是 15.6 / 31.2 ms 交替（01-K44）。
+01-K49：寄存器重读（8 个电机 × 36 个寄存器，两遍，全部应答，两遍完全一致，`A_prep/results/20261019_113146_registers.md`）：`FR_thigh`（3 号）与 `RL_thigh`（5 号）的 `Damp`、`Inertia`、`Rs`、`LS`、`Flux` 仍逐位相同，不是读错，原因未明（推测出厂标定数据被复制）；八个电机的 `TIMEOUT` 均为 0、`KT_Value` 均为 0、`OC_Value` 均为 0.8；`sub_ver` 在 1–5 号为 51、6–8 号为 52。
+01-K50：电机寄存器 `can_br` 八个都是 9。达妙手册的编码表为 0=125K、1=200K、2=250K、3=500K、4=1M、5=2M、6=2.5M、9=5M，所以 9 是 5 Mbps；手册还写明：上电后波特率大于 1 Mbps 时电机自动用 CAN FD，仍可接收 CAN 2.0B 帧，但反馈帧用 CAN FD。这解释了"5M"（电机的数据段）与"1M"（仲裁段）两种说法，也解释了为什么盒子通道必须设成 CAN FD 才能收到反馈（来自搜索摘要，未逐页核对手册）。
+01-K51：SDK 2.x（DeepSeek 报告，部分核实）：`dmcan-sdk` 2.1.1 于 2026-10-12 发布，后端库改为 `libdmcan`，接口与 1.x 不兼容；要求模块固件 V2.0.0 及以上（双路构建标识不低于 `b5c2574`），旧固件上通道使能会失败；官方说明提到 Linux arm64 库，但没有明确列出。现在盒子固件是 `dual_app v1.0.0.7`，不满足；公开仓库里没有 V2.0.0 固件，需要向达妙要。DeepSeek 报告的"1 kHz 端到端 p50 约 1.8 ms"、gs_usb 路线、JetPack 6.2 没有 `gs_usb.ko`、Jetson 原生 `can0` 环回数据，我没有核实（未验证）。
+01-K52：12 Hz 低通（DeepSeek 称"比通信更大的问题"）对 `bennett_1` 不成立：`bennett_rl/README.md` 的 K32 记录训练端已对角速度、重力投影、关节速度加噪声后做同样的 12 Hz 一阶低通，与部署端一致；只有旧任务（`trot1`、`go2-10`、`free_gait3`）训练里没有，用这些旧策略上真机才是失配。`docs/CONTROL_CONTRACT.md` 第 29 行"训练里未见"是旧说法。
+
+### D. 方案
+
+工作方式：不求快，求做对。每测完一项，先上网查资料核对数值合不合理、测法对不对，再写结论；能当场解决的当场解决，解决不了的记入待完成，晚些再查。
 
 | 步骤 | 内容 | 是否使能电机 |
 | --- | --- | --- |
@@ -338,7 +417,7 @@ SW 质量覆盖的 7 种零件：
 - 使能后的掉线与 `TIMEOUT` 行为试验，以后单独评估；现在只审查配置与软件超时逻辑。
 - 单独的请求—反馈往返时间，只作电机通信性能的可选诊断（旧版本因批量交付干扰已废弃）。
 
-### D. 文件夹架构
+### E. 文件夹架构
 
 `01_communication/` 自成一体：新采集按 A 至 D 四个步骤分文件夹，旧一轮（官方 DLL 时期）的数据与脚本放在 `legacy_*`，只作线索。
 
@@ -382,31 +461,96 @@ docs/ROBOT.md                                             机器人总览
 
 新数据放各主题文件夹的 `data/raw/日期/实验名/`，实验名按 `DATA_CONTRACT.md` 命名。空文件夹 git 不会同步，有文件后才会出现在另一台电脑上。
 
-### E. 调研依据
+### F. 调研依据
 
 资料见 `System_Identification/workstreams/01_communication/references/调研要点.md`。要点：文献通常在台架上测指令到首个响应，取最小与最大值，作为仿真延迟缓冲的范围；观测延迟与动作延迟分开设置；PACE 把延迟作为全局参数拟合，单驱动通信延迟按可忽略处理。
+
+### G. 读到的线索与工具用法
+
+放后面，供后续会话恢复上下文用；核实过的写事实，没核实的标"未验证"。
+
+| 设备 | USB ID | 备注 |
+| --- | --- | --- |
+| USB2CANFD 盒 | `34B7:6877`（单路）、`34B7:6632`（双路） | 来自 `sim2real/tools/dev_sn.py`；2026-10-19 Windows 与 Jetson 的 USB 列表里都没有它 |
+| DM-IMU-L1 | `6877:4d55` | 在 Jetson 上，串口 `/dev/ttyACM0`，属 dialout 组 |
+| Jetson 的 USB 设备模式 | `0955:7020` | Windows 里出现 RNDIS 网卡、COM5 串口、`L4T-README` 盘（F 盘，含 L4T 版本文件） |
+
+01-K15：`dmcan-sdk` 1.0.4 安装在 Python 3.13 的用户目录；`py -3.13` 可直接 `import dmcan`。torch 环境是 Python 3.11，`dm_can.py` 临时借用 3.13 的 user-site 导入 `dmcan`。
+01-K16：`dm_can.py` 在 Windows 用环境变量 `BENNETT_DM_SDK_PROFILE`（`original` 或 `low_latency`）选动态库，并校验 SHA256；官方 `DB7FC43D…`，补丁版 `252FAEFD…`。Linux 固定用 `sim2real/sdk/dlls/libdm_device.so`。
+01-K17：测试脚本想只借用库加载逻辑、不引入 torch 等依赖，可用 `importlib.util.spec_from_file_location` 直接加载 `dm_can.py`，不经过 `bennett_deploy/__init__.py`；`A_prep/scripts/read_device_info.py` 就是这样做的。
+01-K18：`dmcan` 的接收帧头字段有 `timestamp`（64 位）、`channel`、`canfd`、`brs`、`dir`、`ack`、`esi`；接口有 `get_channel_baudrate`、`get_channel_baudrate_details`（读预分频与时间片）、`get_version`；`dmcan_device_type` 为 `USB2CANFD`、`USB2CANFD_DUAL`、`LinkX4C`。
+01-K19：Windows 上关闭设备会挂死，`dm_can.py` 因此跳过 SDK 关闭；新脚本写完结果后直接 `os._exit(0)`。
+01-K20：旧探测脚本的设备序列号为 `D6977F56F86C64B77B316E7154FA6DF3`（`USB2CANFD_DUAL`），CAN 映射 ch0：id 1、2、5、6，ch1：id 3、4、7、8。
+01-K21：Jetson 登录入口与限制见全局规则（`jetson_experiment.ps1`，claude-lab，无 sudo，只在 dialout 组）；该账户读 `/dev/ttyACM0` 可行，能否访问 USB2CANFD 盒（libusb 需要设备权限或 udev 规则）未验证。
+01-K22：社区驱动建议每帧命令后延迟 1–2 ms，否则回复丢失（`DM_Motor_Control`，未验证是否适用于本 SDK）；该来源另称电机只在收到控制命令后才回复反馈。
+01-K23：9 月寄存器快照里 `TIMEOUT` 为 0、`sub_ver` 51 与 52 混用等，见 `docs/ROBOT.md` 第 3 节，数据在 `legacy_hardware/data/`。
+01-K41：反汇编工具 `capstone`、`pefile` 装在 `E:/HuanCun/AI_tmp/Claude/pylibs_20261019`（Python 3.11 的 `--target`，用 `sys.path.insert` 引入）；读 DLL 的脚本在 `E:/HuanCun/AI_tmp/Claude/comm_diag_20261019/`（`dll_inspect.py`、`dll_calls.py`），是临时文件，要保留的方法已写在 K36 至 K38。
+
+### H. 外部复核（DeepSeek，2026-10-20）及处理
+
+复核文件在 `E:/HuanCun/AI_tmp/Deepseek/01_comm_crosscheck/`（`FOR_CLAUDE.md` 等）。DeepSeek 只读，没有改仓库；它也用了 Jetson 上的 `seeed` 账户和 `sudo` 做测量，与本仓库的 Jetson 入口规则无关。
+
+| 编号 | 问题 | 判断 | 处理 |
+| --- | --- | --- | --- |
+| I1 | 部署缺省用官方库 | 成立 | 已改缺省（01-K45） |
+| I2 | 交付滞后与 8 电机时间差依赖坏时间戳 | 成立 | 已撤回（01-K46） |
+| I3 | `summary.json` 写进 raw | 成立 | 已改到 `data/processed/` |
+| I4 | 发送尖峰是垃圾回收 | 不成立 | 对照试验否定，原因未明（01-K47） |
+| I5 | 1 kHz 下 8 次发送占 62–66% 周期 | 成立 | 记入待完成 |
+| I6 | custom DLL 缺补丁说明 | 成立 | 已写 `B_motor_comm/patches/PATCH.md` |
+| I7 | 01 没有 README、`params/timing.yaml` 未落地 | 部分成立 | README 在仓库根；已更新 `workstreams/README.md` 与 `params/README.md` 的编号，`timing.yaml` 等数字齐了再写 |
+| I8 | 寄存器快照一份全空、3 号与 5 号相同 | 成立 | 已重读（01-K49） |
+| I9 | 旧图 `dpi=2000` | 成立 | 已改 300 dpi 并重出（备份在 `AI_tmp/Claude/legacy_fig_backup_20261019/`） |
+| I10 | Linux `.so` 是 x86-64 | 已知 | 见 01-K5、01-K51 |
+| I11 | `TIMEOUT=0` | 已知 | 见 01-T8、01-K49 |
+| I12 | IMU 轮询读法多 0.4 ms、最坏 9 ms | 成立但收益小 | 记入待完成，改 `imu.py` 前需实机验证 |
+| 低通 | 12 Hz 低通比通信更大 | 对 `bennett_1` 不成立 | 见 01-K52 |
 
 ## 已完成
 
 - [X]  2026-10-19 读两张硬件图（控制与接线、硬件系统集成），明确通信链路与 USB 设备（A）。
 - [X]  2026-10-19 核对部署代码的发令率、帧类型、反馈记时方式与 Linux 库架构（B、01-K2 至 01-K5）。
-- [X]  2026-10-19 审阅 Codex 的调研，并自行查资料（达妙官方仓库、`dmcan-sdk`、文献），定下方案（C、D）；纠正了"每路 4 电机、50 Hz，总线负载很小"的判断。
+- [X]  2026-10-19 审阅 Codex 的调研，并自行查资料（达妙官方仓库、`dmcan-sdk`、文献），定下方案（D、F）；纠正了"每路 4 电机、50 Hz，总线负载很小"的判断。
 - [X]  2026-10-19 清理 `00_…` 与原 `01_…`、`02_…` 下的空文件夹与占位文件。
 - [X]  2026-10-19 读 SDK 初始化与退出流程、旧探测脚本和 `dmcan` 接口（01-K11 至 01-K14）；只读代码，没有连设备。
+- [X]  2026-10-19 经 `jetson_experiment.ps1` 只读登录 Jetson，核实型号与系统（01-K6）；读了 Windows 与 Jetson 的 USB 列表（01-K15 至 01-K23）。
+- [X]  2026-10-19 写 `A_prep/scripts/read_device_info.py`（只读：枚举盒子、固件版本、两路 CAN 实际速率）并在 Windows 上用官方库与补丁库各跑一次，结果见 01-K3。
+  - 第一次因 `dataclass` 要求模块已登记而报错，加 `sys.modules` 登记后通过；第二次两个结果文件重名，已改成文件名带库名并重跑。
 - [X]  2026-10-19 通信辨识定为 01 号包：原 `01_hardware_inventory`、`02_timing_latency` 并入 `01_communication/`，旧数据与脚本移入 `legacy_hardware/`、`legacy_timing/`，硬件图移入 `references/硬件/`；旧脚本里的路径已改，语法检查通过，没有重跑；新建 `A_prep/`、`B_motor_comm/`、`C_loop_timing/`、`D_obs_freshness/`。
+
+- [X]  2026-10-19 Windows 零力矩 1 kHz × 8 电机命令流：官方库与补丁库各 2 次，每次 30 s；脚本 `B_motor_comm/scripts/zero_torque_stream.py` 与 `analyze_stream.py`；结果见 C（01-K24 至 01-K32）。
+  - 首次因状态查询无应答，脚本按设计中止，没有发送零力矩帧；诊断脚本在 `E:/HuanCun/AI_tmp/Claude/comm_diag_20261019/`，只发寄存器读取与状态查询。
+  - 分析脚本第一版用整段线性拟合算交付滞后，被设备时间戳跳变破坏（算出 450 ms），改用 2 s 窗口最小值后，DeepSeek 复核指出前跳每秒一次、基线同样被重置，交付滞后作废（01-K46）。
+  - 每次测量后用 `A_prep/scripts/restore_channel_settings.py` 恢复 ch0 设置并读回核对。
+- [X]  2026-10-20 处理 DeepSeek 的复核意见（H 组，01-K45 至 01-K52）：核实、修复、撤回各项，并验证部署时钟修复（01-K48）。
+  - 部署代码改动：`dm_can.py`、`imu.py`、`runtime.py` 的 14 处时钟，`runtime.py` 的缺省库；备份 `E:/HuanCun/AI_tmp/Claude/deploy_clock_fix_20261019/bennett_deploy_before/`，可整体还原。
+  - 新脚本 `A_prep/scripts/read_registers.py`；分析脚本改写输出位置并作废两项指标。
+  - 测完把 ch0 恢复并读回核对。
+- [X]  2026-10-19 控制程序节拍：在部署同款环境下加入策略推理的发令环，对比无策略（01-K42 至 01-K44）。
+  - 脚本 `B_motor_comm/scripts/zero_torque_stream.py` 新增 `--policy`；带策略的运行存入 `C_loop_timing/`。
+  - 测完把 ch0 恢复并读回核对。
+- [X]  2026-10-19 查明补丁库批间隔为 15.6 ms 的原因：读 DLL 反汇编，直接调用 `sleep_for` 验证，并在临时 DLL 副本上试验（01-K36 至 01-K38）。
+  - 第一个猜测是测试脚本没调 `timeBeginPeriod(1)`，加上后重测无变化，排除（01-K33）。
+  - 试验用 DLL、临时脚本在 `E:/HuanCun/AI_tmp/Claude/comm_diag_20261019/`，可删；`make_test_dll.py` 可重新生成。
 
 ## 待完成
 
 按顺序做。每一步完成后把结论写进「基准与结论」。
 
-- [ ]  01-T1 读设备信息：接电不使能，只调用 `get_version`、`get_channel_baudrate`，核对固件版本与 CAN 实际速率、帧类型；记录 USB 口与 CAN 盒型号。卡在：需要上机。
-- [ ]  01-T2 基线复现：Windows 官方库，沿用旧探测同款的零力矩 1 kHz 命令流，加记帧 `timestamp` 与实际发令节拍，确认 109 ms 批量是否复现、`timestamp` 的单位与含义。卡在：需要你同意发零力矩帧，并停掉训练。
-- [ ]  01-T3 补丁库同测：同样条件换补丁版 DLL，对比批间隔与帧到达分布。
-- [ ]  01-T4 控制程序节拍：发令环与策略环的实际周期、超时，单独运行与加入推理、IMU、日志后的变化。
-- [ ]  01-T5 观测新鲜度：策略取观测时，每个关节和 IMU 最新数据有多旧，各路是否相差太多。
-- [ ]  01-T6 Jetson：找 arm64 SDK，重复 T2 至 T5；卡在 01-K5。
-- [ ]  01-T7 把结果折成策略步，写进 `bennett_rl/README.md` 的 T4a、T4e，并更新 `docs/ROBOT.md`。
-- [ ]  01-T8 审查电机 `TIMEOUT` 配置与软件反馈超时（现为 0.5 s，对 109 ms 批量交付不起作用）。
+- [ ]  01-T1 Jetson 上运行 `A_prep/scripts/read_device_info.py`，读盒子设置。卡在：盒子要接到 Jetson，且 01-K5（arm64 版库）。Windows 部分已完成（01-K3）。
+- [ ]  01-T2 控制程序节拍：加入 IMU 读取与日志写盘后的节拍（发令环与推理已测，见 01-K29、01-K43）；IMU 现在接在 Jetson 上。
+- [ ]  01-T3 观测新鲜度：IMU 的新鲜度，以及完整部署程序下策略取观测时关节反馈的时龄（零力矩流下的结果见 01-K26、01-K27）。
+- [ ]  01-T4 是否采用睡眠常量不足 1 ms 的 DLL（01-K38）：先请用户在真实部署程序下试，看 CPU 占用与行为；Linux/Jetson 找 arm64 版 `.so`，检查同样的常量（01-K39）。
+- [ ]  01-T5 发送调用偶发阻塞（最长约 11 ms，3.11 下曾到 33 ms）的原因：已排除垃圾回收（01-K47），仍待查 Windows 调度与 USB 写入。
+- [ ]  01-T6 Jetson：找 arm64 SDK，重复 01-K24 至 01-K29 的测量以及 T2、T3；卡在 01-K5，盒子要接到 Jetson。
+- [ ]  01-T7 把结果折成策略步，写进 `bennett_rl/README.md` 的 T4a、T4e；Windows 补丁库的数字已有（01-K28），Jetson 与完整程序下的数字待 T2、T3、T6。
+- [ ]  01-T8 审查电机 `TIMEOUT` 配置与软件反馈超时（现为 0.5 s，对官方库约 120 ms 的批量交付不起作用）。
+- [ ]  01-T9 部署时钟修复已完成并验证（01-K48），尚未在真机整机运行；请用户下次上机时留意策略步间隔与日志里的反馈时龄是否正常。
+- [ ]  01-T10 发送侧余量：每周期 8 次发送占约 62–66% 的 1 ms；评估批量发送（SDK 2.x 的 `send_can_batch`）、减少每次调用的 Python 开销，并补 2 kHz 测试（DeepSeek I5）。
+- [ ]  01-T11 向达妙要 V2.0.0 固件（双路构建不低于 `b5c2574`）与 `libdmcan` 2.1 的 Windows 与 Linux arm64 包（01-K51）；拿到前不迁移 SDK 2.x，现有 1.x 路线继续。
+- [ ]  01-T12 custom DLL（睡眠 0.5 ms）上真机前：长稳 10–30 分钟、CPU 占用、2 kHz 余量、有无内存增长或丢帧（01-K38，PATCH.md）。
+- [ ]  01-T13 IMU 读法：`imu.py` 的轮询加 `sleep(1 ms)` 改阻塞读，DeepSeek 在 Jetson 上测得中位时龄 1.25 到 0.85 ms、最大 8.96 到 0.96 ms（I12，未独立复现）；收益小，需要在 Windows 与 Jetson 上实机验证后再改。
+- [ ]  01-T14 写 `params/timing.yaml`：等 Jetson 与 IMU 的数字齐了，再把观测时龄、命令频率、库版本与哈希落成参数文件（DeepSeek I7）。
 
 ---
 
@@ -455,7 +599,7 @@ python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latenc
 | `--keyboard` | 键盘给速度指令；电机回到默认姿态并预热后，按空格或回车才启动策略 |
 | `--check_only` | 只校验训练配置与 TorchScript 策略，不打开 IMU 与电机 |
 | `--dry_run` | 读 IMU、跑策略，不打开电机 |
-| `--dm_sdk_profile original` / `low_latency` | 选电机动态库：`original`（缺省）为官方版，反馈约每 109 ms 一批；`low_latency` 为补丁版，批量间隔改为 1 ms，真实延迟未测，仅 Windows 有。用 T9 等训练时没加滞后的策略、真机迟钝或摔倒时再试 |
+| `--dm_sdk_profile original` / `low_latency` | 选电机动态库：缺省 Windows 为 `low_latency`、Linux 为 `original`（2026-10-19 起，此前缺省 `original`）；`original` 为官方版，反馈约每 110–120 ms 一批；`low_latency` 为补丁版，反馈时龄均值约 7 ms（01-K27），仅 Windows 有。用 T9 等训练时没加滞后的策略、真机迟钝或摔倒时再试 |
 | `--imu_port <串口>` | IMU 串口；Windows 缺省 `COM6`，Linux 缺省 `/dev/ttyACM0`（推测），以实际枚举为准 |
 | `--output_scale <0–1>` | 策略动作的缩放，首次试验取小值 |
 | `--active_joints rr` | 只驱动 RR 的两个关节，缺省 `all` |
@@ -568,7 +712,7 @@ sim2real/
 - sim2real-K4：训练配置差异：go2-10 的执行器为力矩限 7 N·m、饱和 12 N·m、速度限 30 rad/s，bennett_1 为 8、20、20。
 - sim2real-K5：缺省策略的已知性质（来自 `bennett_rl/README.md`）：T9 训练时没有加反馈滞后，滞后 80 ms 开始变差、100 ms 失效；官方动态库的反馈约 109 ms 一批，所以用 T9 时建议用补丁版（Windows，`--dm_sdk_profile low_latency`），或换 D4（K54）。S1 前进时四脚抬高 27–41 mm，两脚同时着地约占 20%（K53）。
 - sim2real-K6：Linux 部分只做了静态检查与键盘解析单测，未在 Linux 上运行：`.so` 绑定、termios 键盘、串口名、`low_latency` 无 Linux 版。
-- sim2real-K7：`dm_sdk_profile` 缺省为 `original`（官方版）；补丁版的真实延迟未测。
+- sim2real-K7：`dm_sdk_profile` 缺省：Windows 为 `low_latency`，Linux 为 `original`（2026-10-19 起；此前缺省 `original`）；补丁版的反馈时龄见 01-K27。
 - sim2real-K8：把训练仓库藏起来（`BENNETT_RL_ROOT` 指向不存在的目录）后，6 个入口的 `--check_only` 与单元测试照常通过，契约指纹与此前一致，说明运行不依赖 `bennett_rl`；未在另一台电脑上验证，那里还需要 Python 环境与依赖。
 
 ## 已完成

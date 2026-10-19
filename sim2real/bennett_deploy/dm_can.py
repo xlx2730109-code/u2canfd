@@ -253,7 +253,7 @@ class Motor:
         self.channel = int(channel)
         self.limit_param = list(limit_param[self.Motor_Type.value])
         self.param_map: Dict[int, ValueType] = {}
-        self.last_time_ = time.monotonic()
+        self.last_time_ = time.perf_counter()
         self.delta_time_ = 0.0
         self.state_q = 0.0
         self.state_dq = 0.0
@@ -261,7 +261,7 @@ class Motor:
         self.state_err = 0
 
     def updateTimeInterval(self) -> float:
-        now = time.monotonic()
+        now = time.perf_counter()
         self.delta_time_ = now - self.last_time_
         self.last_time_ = now
         return self.delta_time_
@@ -776,8 +776,8 @@ class Go2MotorBus:
 
     def wait_fresh_feedback(self, timeout_s: float = 1.0) -> None:
         initial = {name: motor.last_time_ for name, motor in self.motors.items()}
-        deadline = time.monotonic() + timeout_s
-        while time.monotonic() < deadline:
+        deadline = time.perf_counter() + timeout_s
+        while time.perf_counter() < deadline:
             for motor in self.motors.values():
                 self.control.refresh_motor_status(motor)
                 self.control.control_mit(motor, 0.0, 1.5, 0.0, 0.0, 0.0)
@@ -789,7 +789,7 @@ class Go2MotorBus:
         raise RuntimeError(f"no fresh motor feedback during safe start: {missing}")
 
     def snapshot(self, now: Optional[float] = None) -> Dict[str, MotorSnapshot]:
-        timestamp = time.monotonic() if now is None else float(now)
+        timestamp = time.perf_counter() if now is None else float(now)
         with self.control._lock:
             return {
                 name: MotorSnapshot(

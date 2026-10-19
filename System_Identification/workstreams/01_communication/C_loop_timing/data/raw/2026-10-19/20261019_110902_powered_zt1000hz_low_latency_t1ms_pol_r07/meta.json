@@ -1,0 +1,29 @@
+{
+  "run_id": "20261019_110902_powered_zt1000hz_low_latency_t1ms_pol_r07",
+  "t_start_ns": 60908461798300,
+  "t_end_ns": 60938462219600,
+  "t_mono0_ns": 60908461791200,
+  "t_wall0_ns": 1792433343132969200,
+  "rate_hz": 1000.0,
+  "seconds": 30.0,
+  "cycles": 30000,
+  "tx_frames": 240000,
+  "tx_fail": 0,
+  "policy": "E:/HuanCun/Desktop/u2canfd/sim2real/policies/bennett_1_crawl_T9/exported/policy.pt",
+  "policy_hz": 50.0,
+  "policy_ticks": 1500,
+  "rx_frames_total": 240008,
+  "process_cpu_s": 13.625,
+  "cpu_over_wall": 0.454,
+  "passive_frames_before_tx": 0,
+  "initial_status": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0
+  }
+}

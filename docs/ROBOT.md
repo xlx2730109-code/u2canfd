@@ -42,17 +42,17 @@
 
 **电机**【已确认】8 × 达妙 DM-J8006-2EC V1.1
 - 减速比 6:1，额定转矩 8 N·m，峰值 20 N·m，双编码器；单个质量 559 g（经销商，与 SW 一致）。
-- 寄存器快照（2026-09-16，不使能读取）：Gr 6，NPP 21，PMAX 12.5，VMAX 45，TMAX 20，`KT_Value` 0，`GREF` 1，`Damp` 约 5e-4 到 1.1e-3，`Inertia` 约 1.2e-4，`Rs` 约 0.41，`KP_APR` 54，`I_BW` 1000，`V_BW` 40；**`TIMEOUT` 0（无通信看门狗）**，**`OC_Value` 0.8（含义待查）**，`UV_Value` 15，`OV_Value` 54，`OT_Value` 100；`sub_ver` 51 与 52 混用（`RL_calf`、`RR_thigh`、`RR_calf` 为 52）；`FR_thigh` 与 `RL_thigh` 的 `Rs`、`LS`、`Flux`、`Damp`、`Inertia` 逐位相同（疑为读错）。
+- 寄存器快照（2026-09-16，不使能读取）：Gr 6，NPP 21，PMAX 12.5，VMAX 45，TMAX 20，`KT_Value` 0，`GREF` 1，`Damp` 约 5e-4 到 1.1e-3，`Inertia` 约 1.2e-4，`Rs` 约 0.41，`KP_APR` 54，`I_BW` 1000，`V_BW` 40；**`TIMEOUT` 0（无通信看门狗）**，**`OC_Value` 0.8（含义待查）**，`UV_Value` 15，`OV_Value` 54，`OT_Value` 100；`sub_ver` 51 与 52 混用（`RL_calf`、`RR_thigh`、`RR_calf` 为 52）；`FR_thigh` 与 `RL_thigh` 的 `Rs`、`LS`、`Flux`、`Damp`、`Inertia` 逐位相同（2026-10-19 重读两遍仍相同，不是读错，原因未明）；`can_br` 均为 9（5 Mbps，达妙手册编码表）。
 - MIT 模式命令：`τ = Kp·Δq + Kd·Δv + τff`，Kp 12 bit 0–500，Kd 12 bit 0–5，位置 16 bit ±12.5 rad，速度 12 bit ±45，转矩 12 bit ±20；编码用截断。
 - 输出端读数就是关节角（1:1，不用乘 6）。
 
 **通信**【已确认】
-- USB2CANFD 双路，CAN-FD，仲裁 1 Mbps，数据 5 Mbps（部署代码 `dm_can.py` 的设置，CAN FD 与 BRS 都开；用户记得设为 5M；上机时核对设备实际设置）。
+- USB2CANFD 双路，CAN-FD，仲裁 1 Mbps，数据 5 Mbps（部署代码 `dm_can.py` 启动时写入，CAN FD 与 BRS 都开）。2026-10-19 读到盒子当前设置：ch0 经典 CAN 1 Mbps，ch1 CAN FD 1 M / 5 M，固件 `dual_app v1.0.0.7`；部署启动会把两路都改写成 FD 1 M / 5 M。
 - CAN ID：ch0 = id 1,2,5,6（FL_thigh、FL_calf、RL_thigh、RL_calf），ch1 = id 3,4,7,8（FR、RR）；反馈 ID = 0x10 + 发送 ID。
-- 达妙官方 `libdm_device.dll`（Windows）与 Linux `.so` 里有 100 ms 批量交付常量：反馈每约 109 ms 一批，控制器拿到的角度平均旧约 55 ms。Windows 有补丁版 `dlls_lowlatency/`（改成 1 ms），Linux 未补丁。补丁版的真实延迟**没测过**。
+- 达妙官方 `libdm_device.dll`（Windows）与 Linux `.so` 里有 100 ms 批量交付常量：反馈每约 109 ms 一批，控制器拿到的角度平均旧约 55 ms。Windows 有补丁版 `dlls_lowlatency/`（改成 1 ms），Linux 未补丁。2026-10-19 在 Windows 按部署负载（1 kHz、8 电机）实测：官方库反馈时龄均值约 50 ms、最大约 124 ms；补丁库均值约 8–9 ms、最大约 30 ms；部署同款（补丁库加 `timeBeginPeriod(1)`）均值约 7 ms、最大约 16 ms；批间隔约 15.6 ms，不是 1 ms：DLL 里的 `sleep_for(1 ms)` 经 MinGW 的 winpthreads 实际睡约 15 ms，睡不足 1 ms 则不睡；临时副本改成 0.5 ms 后时龄均值约 0.6 ms、最大约 5 ms，代价是多占约 1 个核（只试验、未部署）；部署应使用补丁库（用户已在用 `--dm_sdk_profile low_latency`）；Linux 未测。
 
 **计算与传感**
-- Jetson Nano，Ubuntu 22.04【用户确认，2026-10-19】（原版 Nano 官方只到 Ubuntu 20.04，实际型号可能是 Orin 系列，推测；JetPack 版本未知；SW 里有 Nano 与 DM-ORIN NX 两种文件）+ 手柄接收器；Windows 电脑与 Jetson 都用于部署；Jetson 联网问题仍在解决【用户确认】。
+- Jetson：用户称 Nano；2026-10-19 经 SSH 读到【已确认】：NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super，主机名 seeed，Ubuntu 22.04.5，L4T R36.4.3（JetPack 6.2），aarch64，Python 3.10.12；USB 设备模式地址 192.168.55.1，登录方式见全局规则（claude-lab，无 sudo，只在 dialout 组）。当时 USB 上有 DM-IMU-L1（`/dev/ttyACM0`）、键盘、鼠标、蓝牙，**没有 USB2CANFD 盒**。SW 里有 Nano 与 DM-ORIN NX 两种文件。+ 手柄接收器；Windows 电脑与 Jetson 都用于部署；Jetson 联网问题仍在解决【用户确认】。
 - IMU：DM-IMU，USB 串口 COM6，921600 baud，约 1000 Hz；reg1 加速度、reg2 角速度（rad/s）、reg3 欧拉角。已做安装倾角标定（倾角 1.13° → 0.72°）。【已确认】
 - 电子部分的更多细节用户说在通信辨识时讲【未知】。
 
@@ -125,7 +125,7 @@
 - 主循环：命令 1 kHz，策略 50 Hz；起动状态机：回默认姿态 → 预热 → 等待授权 → 策略。
 - 关节速度与 IMU 各加 12 Hz 一阶低通（训练里没有对应滤波）。
 - bennett_1 爬行变体的观测是 50 维，前 33 维同上，末 17 维是相位信息：全局相位 sin/cos（2）、各腿相位 sin/cos（8，每条腿的 sin 与 cos 相邻）、应着地标志（4）、步态参数（3：0.55 Hz、占空比 0.78、摆动高度 0.045）；相位 =（策略启动后的时间 × 0.55 Hz）取小数部分，指令为零时全部取站立值；腿序 FL→RR→FR→RL。部署端要照此生成，参考 `bennett_rl/sim2sim/configs/bennett_1_crawl.py` 与 `sim2sim/sim2sim.py` 的 crawl 模式。【已确认训练与 sim2sim 的实现，未部署】 入口已写：`sim2real/bennett_1_crawl_deploy.py`（缺省 T9）、`bennett_1_free_deploy.py`（缺省 S1），`--check_only` 通过，尚未上真机；T9 训练时无反馈滞后，官方动态库（约 109 ms）下可能不稳。
-- `--dm_sdk_profile low_latency` 选补丁版 DLL；`quad_leg_trot1_deploy.py` 没传这个参数，默认走官方版（109 ms 批量）。
+- `--dm_sdk_profile`：缺省 Windows 为 `low_latency`（补丁版）、Linux 为 `original`（2026-10-19 起；此前缺省 `original`，不带参数会走官方库，反馈约每 110–120 ms 一批）；部署的时钟统一为 `time.perf_counter()`（此前 `time.monotonic()` 在 Python 3.11 的 Windows 上只有约 15.6 ms 精度，策略调度间隔曾是 15.6/31.2 ms 交替）。
 - 软件力矩限 `--software_effort_limit_nm` 默认 0（关闭）；训练限 8 N·m，固件 TMAX 20。
 - `sim_to_motor` 符号【已确认，代码注释与用户确认入口已验证】：腿部策略沿用 `bennett_deploy` 的表（FL、RL 的 thigh 为 +1，FR_calf、RR_calf 为 −1）；`free_gait_contract.py` 注释记载 +1 在实机验证过（2026-09-05），`3_quad_leg_track.py` 里的 −1 会使步态镜像、不适用于腿部策略。不改动。
 - `技术文档_1.md` 里"关节指令乘 6"已被实测推翻。
@@ -133,7 +133,7 @@
 
 ## 8. 已知问题与风险
 
-1. 通信：官方 DLL / Linux `.so` 的 100 ms 批量交付；补丁版延迟没测过；开题里的"约 36 ms"是批相位，不是常数。
+1. 通信：官方 DLL / Linux `.so` 的 100 ms 批量交付；补丁版实测反馈时龄均值约 8–9 ms、最大约 30 ms（Windows，2026-10-19）；Linux 未测；开题里的"约 36 ms"是批相位，不是常数。
 2. 电机 `TIMEOUT` = 0，上位机崩溃时电机会保持最后一条命令。
 3. 训练的执行器没有延迟、摩擦、电枢惯量（折算转子惯量约 1.2e-4 × 36 ≈ 4.4e-3，待验证）。
 4. 训练 USD 指向仍有 `_4`（见第 6 节）。
@@ -144,7 +144,7 @@
 9. bennett_1 爬行变体的后退、侧移速度对地面摩擦敏感（仿真中摩擦越大速度越低），真机地面摩擦未测，实际速度可能低于指令（`bennett_rl/README.md` K58、T34）。
 10. 部署默认 1000 Hz 发令，每帧电机回一帧，每路约 8000 帧/s，CAN FD 下负载约 45–50%，若退回经典 CAN 1 Mbps 接近饱和（推测，待实测）。
 11. 仓库里的 Linux `libdm_device.so` 是 x86-64，Jetson 是 arm64，不能直接加载，需要另找 arm64 版。
-12. 反馈新鲜度用的是主机回调时刻，没有用帧自带时间戳；时间戳含义未验证。
+12. 反馈新鲜度用的是主机回调时刻，没有用帧自带时间戳（帧头时间戳单位为 ns，但有跳变）；部署环境 Python 3.11 的 `time.monotonic()` 在 Windows 上分辨率约 15.6 ms，部署日志里的反馈时龄只有 0 或 16 ms 两档，真实时龄要用 `perf_counter` 算（策略 tick 处均值约 6.6 ms）。
 
 ## 9. 系统辨识
 
@@ -181,7 +181,7 @@
 
 - 电子部分的细节（CAN 盒型号与固件、终端电阻、USB 口分配、供电细节）：用户让我上机时自己读取核对；Jetson 的 JetPack 版本与实际型号未知。
 - 补丁版 DLL 的真实反馈延迟、Linux 上的情况。
-- 电机寄存器 `OC_Value`、`KT_Value` 的含义；`FR_thigh`/`RL_thigh` 寄存器相同的原因。
+- 电机寄存器 `OC_Value`（0.8）、`KT_Value`（0）的含义；`FR_thigh`/`RL_thigh` 五个寄存器逐位相同的原因（2026-10-19 重读两遍，确认不是读错）。
 - 折算到关节的电枢惯量、摩擦、延迟（执行器辨识要得到）。
 - 样机零位偏差的大小；真机的齿隙、松动（旧笔记提过"其他腿有点松动"）。
 - 足的形状、半径、软硬、摩擦（仅有 URDF 网格和 0.072 kg）。

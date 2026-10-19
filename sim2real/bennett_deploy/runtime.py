@@ -37,6 +37,9 @@ DM_SDK_PROFILES = {
         "252FAEFDC70F1C52D61F93E74E29B07F871F00230E75985D03CAE7C43B4AF15E",
     ),
 }
+# 缺省库：Windows 用补丁库 low_latency（官方库反馈约每 110–120 ms 一批，时龄均值约 50 ms；见根 README 01-K26、01-K27）；
+# Linux 只有官方库。原来的缺省是 original，不带参数启动会走最慢的那条路。
+DEFAULT_DM_SDK_PROFILE = "low_latency" if sys.platform == "win32" else "original"
 
 
 def _verify_dm_sdk_profile(profile: str) -> tuple[Path | None, str | None]:
@@ -143,8 +146,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dm_sdk_profile",
         choices=tuple(DM_SDK_PROFILES),
-        default="original",
-        help="Windows DM SDK profile; Go2-11 selects the verified low_latency profile by default",
+        default=DEFAULT_DM_SDK_PROFILE,
+        help="DM SDK profile (default: low_latency on Windows, original on Linux); original = vendor DLL, feedback ~110-120 ms batches",
     )
     parser.add_argument("--imu_port", default=DEFAULT_IMU_PORT)
     parser.add_argument("--imu_baudrate", type=int, default=921600)
@@ -466,11 +469,11 @@ class DeploymentRunner:
 
     def _dry_run(self) -> None:
         assert self.imu is not None
-        start = time.monotonic()
+        start = time.perf_counter()
         next_policy = start
         count = 0
         while not self.stop_event.is_set():
-            now = time.monotonic()
+            now = time.perf_counter()
             if self.args.duration_s > 0.0 and now - start >= self.args.duration_s:
                 break
             self._poll_command()
@@ -652,7 +655,7 @@ class DeploymentRunner:
         default_reached_since = None
         warmup_start = None
         policy_start = None
-        next_policy = time.monotonic()
+        next_policy = time.perf_counter()
         next_log = next_policy
         policy_step_count = 0
         log_period = self.pipeline.policy_dt * self.args.log_csv_every
@@ -667,14 +670,14 @@ class DeploymentRunner:
             gait = crawl_phase_terms(0.0, self.contract.gait_frequency_hz, self.contract.gait_duty_factor,
                                      self.contract.gait_swing_height, self.command, self.contract.command_deadband)
         diag_stage = "manual"
-        start = time.monotonic()
+        start = time.perf_counter()
         last_control = start
         period = 1.0 / self.args.control_rate_hz
         deadline = time.perf_counter()
         loop_count = 0
 
         while not self.stop_event.is_set():
-            now = time.monotonic()
+            now = time.perf_counter()
             elapsed = now - start
             if self.args.duration_s > 0.0 and elapsed >= self.args.duration_s:
                 break

@@ -114,7 +114,7 @@ def main():
     tx, rx, batch_med = load_probe()
     print(f"[+] 台阶: 起步滞后 Δ = {d_ms:.1f} ms;  探测: 批间隔中位 {batch_med:.1f} ms")
 
-    fig = plt.figure(figsize=(9.6, 3.9), dpi=2000)
+    fig = plt.figure(figsize=(9.6, 3.9), dpi=300)
     gs = fig.add_gridspec(1, 2, width_ratios=[1.15, 1.0], wspace=0.24,
                           left=0.062, right=0.988, top=0.90, bottom=0.155)
 
@@ -202,7 +202,7 @@ def main():
     fig_dir = os.path.join(WS, "legacy_timing", "results", "figures")
     os.makedirs(fig_dir, exist_ok=True)
     out = os.path.join(fig_dir, "fig1b_latency_shift.png")
-    fig.savefig(out, dpi=2000)
+    fig.savefig(out, dpi=300)
     plt.close(fig)
     print(f"[+] 图: {out}")
 

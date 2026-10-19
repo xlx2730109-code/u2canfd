@@ -109,7 +109,7 @@ def main():
                    "note": "批间隔=同电机相邻两批到达的间隔, 近似反馈最大时龄"}, f, ensure_ascii=False, indent=2)
 
     # ---- 图 ----------------------------------------------------------------
-    fig = plt.figure(figsize=(9.6, 3.9), dpi=2000)
+    fig = plt.figure(figsize=(9.6, 3.9), dpi=300)
     gs = fig.add_gridspec(1, 2, width_ratios=[1.15, 1.0], wspace=0.26,
                           left=0.065, right=0.988, top=0.90, bottom=0.16)
 
@@ -174,7 +174,7 @@ def main():
     fig_dir = os.path.join(WS, "legacy_timing", "results", "figures")
     os.makedirs(fig_dir, exist_ok=True)
     out_png = os.path.join(fig_dir, "fig1_bus_latency.png")
-    fig.savefig(out_png, dpi=2000)
+    fig.savefig(out_png, dpi=300)
     plt.close(fig)
     print(f"[+] 图: {out_png}")
     for r in stats_rows:

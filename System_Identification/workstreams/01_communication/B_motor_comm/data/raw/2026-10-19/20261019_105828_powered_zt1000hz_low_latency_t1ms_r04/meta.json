@@ -1,0 +1,26 @@
+{
+  "run_id": "20261019_105828_powered_zt1000hz_low_latency_t1ms_r04",
+  "t_start_ns": 60275196700000,
+  "t_end_ns": 60305196928000,
+  "t_mono0_ns": 60275196697800,
+  "t_wall0_ns": 1792432709868162500,
+  "rate_hz": 1000.0,
+  "seconds": 30.0,
+  "cycles": 30000,
+  "tx_frames": 240000,
+  "tx_fail": 0,
+  "rx_frames_total": 240008,
+  "process_cpu_s": 11.938,
+  "cpu_over_wall": 0.398,
+  "passive_frames_before_tx": 0,
+  "initial_status": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0
+  }
+}

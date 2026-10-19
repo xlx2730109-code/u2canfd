@@ -1,0 +1,105 @@
+{
+  "run": "20261019_110754_powered_zt1000hz_low_latency_t1ms_r05",
+  "tx_frames": 240000,
+  "tx_fail": 0,
+  "rx_in_window": 240000,
+  "rx_rate_hz_per_motor": {
+    "1": 1000.0,
+    "2": 1000.0,
+    "3": 1000.0,
+    "4": 1000.0,
+    "5": 1000.0,
+    "6": 1000.0,
+    "7": 1000.0,
+    "8": 1000.0
+  },
+  "frame_flags": {
+    "canfd": [
+      1
+    ],
+    "brs": [
+      1
+    ],
+    "dir": [
+      0
+    ],
+    "esi": [
+      0
+    ]
+  },
+  "host_arrival_gap_ms_all_motors": {
+    "n": 239999,
+    "mean": 0.12500904545435604,
+    "p50": 0.0085,
+    "p95": 0.0565,
+    "p99": 0.12060199999999895,
+    "max": 16.4409,
+    "min": 0.0058
+  },
+  "batches": {
+    "count": 1921,
+    "period_ms": {
+      "n": 1920,
+      "mean": 15.62568375,
+      "p50": 15.6235,
+      "p95": 16.678729999999998,
+      "p99": 17.118330999999998,
+      "max": 17.6687,
+      "min": 13.4831
+    },
+    "frames_per_batch": {
+      "n": 1921,
+      "mean": 124.93492972410203,
+      "p50": 125.0,
+      "p95": 144.0,
+      "p99": 171.0,
+      "max": 191.0,
+      "min": 1.0
+    }
+  },
+  "host_arrival_gap_ms_per_motor": {
+    "n": 239992,
+    "mean": 1.0000930085169506,
+    "p50": 0.1159,
+    "p95": 13.140889999999997,
+    "p99": 14.812709,
+    "max": 46.6692,
+    "min": 0.0061
+  },
+  "dev_gap_ms_motor1_median": 1.010964,
+  "dev_timestamp_span_over_host_span": 4.151535913489153,
+  "dev_timestamp_forward_jumps_over_1s": 30,
+  "dev_timestamp_backsteps": 2478,
+  "delivery_lag_ms": null,
+  "dev_skew_within_1ms_bin_ms": null,
+  "invalid_metrics_note": "delivery_lag_ms 与 dev_skew_within_1ms_bin_ms 依赖有周期性前跳的设备时间戳，已作废；时龄只用主机侧口径",
+  "cycle_period_ms": {
+    "n": 29999,
+    "mean": 1.0000017733924464,
+    "p50": 1.0383,
+    "p95": 1.4342099999999998,
+    "p99": 1.6684040000000002,
+    "max": 39.2246,
+    "min": 0.4634
+  },
+  "cycles_over_2ms": 108,
+  "cycles_over_5ms": 27,
+  "send_call_us": {
+    "n": 240000,
+    "mean": 89.54699333333333,
+    "p50": 86.3,
+    "p95": 143.0,
+    "p99": 211.4,
+    "max": 18347.4,
+    "min": 26.4
+  },
+  "feedback_age_ms_at_cycle_start": {
+    "n": 23992,
+    "mean": 6.2828672724241414,
+    "p50": 6.0466,
+    "p95": 13.561185000000002,
+    "p99": 14.362271999999999,
+    "max": 45.1638,
+    "min": 0.0011
+  }
+}

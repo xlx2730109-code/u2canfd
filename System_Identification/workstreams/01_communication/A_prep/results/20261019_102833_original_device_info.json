@@ -1,0 +1,43 @@
+{
+  "time_local": "2026-10-19T10:28:33",
+  "host": {
+    "platform": "win32",
+    "machine": "AMD64",
+    "python": "3.13.9"
+  },
+  "library": {
+    "profile": "original",
+    "path": "sim2real\\sdk\\dlls\\libdm_device.dll",
+    "sha256": "DB7FC43D0D60B847479DCB58CFBE13E524B0CA43C5DFA847D14E760BC0E2A8A7"
+  },
+  "devices": [
+    {
+      "index": 0,
+      "opened": true,
+      "version": "dual_app v1.0.0.7",
+      "channels": [
+        {
+          "channel": 0,
+          "read": true,
+          "canfd": false,
+          "nominal_baud": 1000000,
+          "data_baud": 0,
+          "nominal_sample_point": 0.75,
+          "data_sample_point": 0.0
+        },
+        {
+          "channel": 1,
+          "read": true,
+          "canfd": true,
+          "nominal_baud": 1000000,
+          "data_baud": 5000000,
+          "nominal_sample_point": 0.75,
+          "data_sample_point": 0.75
+        }
+      ]
+    }
+  ],
+  "note": "只读：未设置波特率，未使能通道，未发送任何帧",
+  "device_count": 1,
+  "device_type": "USB2CANFD_DUAL"
+}

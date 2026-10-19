@@ -1,0 +1,24 @@
+{
+  "run_id": "20261019_103603_powered_zt1000hz_low_latency_r01",
+  "t_start_ns": 58929934777200,
+  "t_end_ns": 58959935057300,
+  "t_mono0_ns": 58929934777100,
+  "t_wall0_ns": 1792431364606241700,
+  "rate_hz": 1000.0,
+  "seconds": 30.0,
+  "cycles": 30000,
+  "tx_frames": 240000,
+  "tx_fail": 0,
+  "rx_frames_total": 240008,
+  "passive_frames_before_tx": 0,
+  "initial_status": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0
+  }
+}

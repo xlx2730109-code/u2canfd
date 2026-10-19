@@ -148,7 +148,7 @@ class DMImuSerialReader:
                 with self._lock:
                     self._frame_errors += 1
                 continue
-            now = time.monotonic()
+            now = time.perf_counter()
             with self._lock:
                 self._crc_modes["ccitt" if expected == ccitt else "appendix"] += 1
                 self._latest[register] = tuple(float(value) for value in values)
@@ -161,7 +161,7 @@ class DMImuSerialReader:
                 raise RuntimeError(f"IMU reader failed: {self._thread_error}")
             value = self._latest.get(int(register))
             stamp = self._stamp.get(int(register))
-        return value, float("inf") if stamp is None else max(0.0, time.monotonic() - stamp)
+        return value, float("inf") if stamp is None else max(0.0, time.perf_counter() - stamp)
 
     def diagnostics(self) -> dict:
         with self._lock:
@@ -174,8 +174,8 @@ class DMImuSerialReader:
             }
 
     def wait_ready(self, timeout_s: float = 2.0) -> bool:
-        deadline = time.monotonic() + timeout_s
-        while time.monotonic() < deadline:
+        deadline = time.perf_counter() + timeout_s
+        while time.perf_counter() < deadline:
             with self._lock:
                 if self._thread_error is not None:
                     return False

@@ -42,7 +42,7 @@ python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latenc
 | `--keyboard` | 键盘给速度指令；电机回到默认姿态并预热后，按空格或回车才启动策略 |
 | `--check_only` | 只校验训练配置与 TorchScript 策略，不打开 IMU 与电机 |
 | `--dry_run` | 读 IMU、跑策略，不打开电机 |
-| `--dm_sdk_profile original` / `low_latency` | 选电机动态库：`original`（缺省）为官方版，反馈约每 109 ms 一批；`low_latency` 为补丁版，批量间隔改为 1 ms，真实延迟未测，仅 Windows 有。用 T9 等训练时没加滞后的策略、真机迟钝或摔倒时再试 |
+| `--dm_sdk_profile original` / `low_latency` | 选电机动态库：缺省 Windows 为 `low_latency`、Linux 为 `original`（2026-10-19 起，此前缺省 `original`）；`original` 为官方版，反馈约每 110–120 ms 一批；`low_latency` 为补丁版，反馈时龄均值约 7 ms，仅 Windows 有。用 T9 等训练时没加滞后的策略、真机迟钝或摔倒时再试 |
 | `--imu_port <串口>` | IMU 串口；Windows 缺省 `COM6`，Linux 缺省 `/dev/ttyACM0`（推测），以实际枚举为准 |
 | `--output_scale <0–1>` | 策略动作的缩放，首次试验取小值 |
 | `--active_joints rr` | 只驱动 RR 的两个关节，缺省 `all` |
@@ -155,7 +155,7 @@ sim2real/
 - sim2real-K4：训练配置差异：go2-10 的执行器为力矩限 7 N·m、饱和 12 N·m、速度限 30 rad/s，bennett_1 为 8、20、20。
 - sim2real-K5：缺省策略的已知性质（来自 `bennett_rl/README.md`）：T9 训练时没有加反馈滞后，滞后 80 ms 开始变差、100 ms 失效；官方动态库的反馈约 109 ms 一批，所以用 T9 时建议用补丁版（Windows，`--dm_sdk_profile low_latency`），或换 D4（K54）。S1 前进时四脚抬高 27–41 mm，两脚同时着地约占 20%（K53）。
 - sim2real-K6：Linux 部分只做了静态检查与键盘解析单测，未在 Linux 上运行：`.so` 绑定、termios 键盘、串口名、`low_latency` 无 Linux 版。
-- sim2real-K7：`dm_sdk_profile` 缺省为 `original`（官方版）；补丁版的真实延迟未测。
+- sim2real-K7：`dm_sdk_profile` 缺省：Windows 为 `low_latency`，Linux 为 `original`（2026-10-19 起；此前缺省 `original`）；补丁版的反馈时龄见根 README 01-K27。
 - sim2real-K8：把训练仓库藏起来（`BENNETT_RL_ROOT` 指向不存在的目录）后，6 个入口的 `--check_only` 与单元测试照常通过，契约指纹与此前一致，说明运行不依赖 `bennett_rl`；未在另一台电脑上验证，那里还需要 Python 环境与依赖。
 
 ## 已完成
