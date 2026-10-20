@@ -35,3 +35,8 @@ validation:
   # 注意：延迟主要改善的是力矩误差，位置与速度误差并没有变好（07-K21、07-K23）
   ms8_exam_mean_q_dq_tau: {plain: [3.24 mrad, 0.054 rad/s, 0.145 N·m], nominal_gain_plus_delay: [3.43, 0.055, 0.121], ideal_sim_before: 见 07-K19}
   pd_sweep_model_rmse_frthigh_mrad: 2.5   # 标称增益 + 实测惯量摩擦，30 个 kp/kd 组合
+
+static_findings:                         # 静态阶梯（07-K25），精度有限
+  calf_gravity_stiffness_vs_model: [1.06, 1.60]   # 小腿实测重力斜率与 MuJoCo 之比（去端点后平均 1.28，不确定度 ±0.3，不稳健）；大腿 0.81–1.40，平均 1.12
+  joint_zero_offset_rad_estimate: {FL_thigh: -0.20, FR_thigh: -0.07, RL_thigh: -0.24, RR_thigh: -0.03, calf_all: [-0.06, 0.05]}   # 大腿不确定度约 ±0.1，未验证，不要直接写进训练
+whole_model_fit: 不采用                # 07-K26：整机拟合被模型偏差拖累，数值不可靠

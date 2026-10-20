@@ -29,7 +29,7 @@ def segments(run: Path):
     for tag in sorted(set(p for p in ph[:n] if str(p).endswith("_hold"))):
         idx = np.where(ph[:n] == tag)[0]
         last = idx[-int(0.5 * rate):]
-        L = float(tag[1:6]); kind = "below" if "from_below" in tag else "above"
+        L = float(str(tag).split("_")[0][1:]); kind = "below" if "from_below" in tag else "above"
         rows.append({"level": L, "kind": kind, "q": float(q[last].mean()), "tau": float(tau[last].mean()), "tau_std": float(tau[last].std())})
     return meta, rows
 
