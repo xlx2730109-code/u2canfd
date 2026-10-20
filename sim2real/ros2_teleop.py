@@ -9,7 +9,7 @@ import socket
 import subprocess
 import sys
 
-from bennett_deploy.ros_command import DEFAULT_PORT, TeleopGate
+from bennett_deploy.ros_command import DEFAULT_PORT, JoystickVelocity, TeleopGate
 
 
 def main(argv=None) -> int:
@@ -22,8 +22,12 @@ def main(argv=None) -> int:
     parser.add_argument("--timeout", type=float, default=0.25)
     parser.add_argument("--deadman-button", type=int, default=4)
     parser.add_argument("--stop-button", type=int, default=2)
+    parser.add_argument("--axes", type=int, nargs=3, default=(4, 3, 0), metavar=("VX", "VY", "WZ"))
+    parser.add_argument("--scales", type=float, nargs=3, default=(0.25, 0.12, 0.5), metavar=("VX", "VY", "WZ"))
+    parser.add_argument("--deadzone", type=float, default=0.05)
     args, ros_args = parser.parse_known_args(argv)
     gate = TeleopGate(args.timeout, args.deadman_button, args.stop_button)
+    mapper = JoystickVelocity(args.axes, args.scales, args.deadzone)
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
     try:
@@ -42,7 +46,17 @@ def main(argv=None) -> int:
         node = rclpy.create_node("bennett_cmd_bridge")
         qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         node.create_subscription(Twist, args.topic, lambda m: gate.update_command((m.linear.x, m.linear.y, m.angular.z)), qos)
-        node.create_subscription(Joy, args.joy_topic, lambda m: gate.update_joy(m.buttons), qos)
+        publisher = None if args.bridge_only else node.create_publisher(Twist, args.topic, 1)
+
+        def joy_callback(message):
+            gate.update_joy(message.buttons)
+            if publisher is not None:
+                command = mapper.command(message.axes)
+                twist = Twist()
+                twist.linear.x, twist.linear.y, twist.angular.z = command
+                publisher.publish(twist)
+
+        node.create_subscription(Joy, args.joy_topic, joy_callback, qos)
 
         def send():
             if any(child.poll() is not None for child in children):
@@ -52,14 +66,15 @@ def main(argv=None) -> int:
         node.create_timer(0.02, send)
         if not args.bridge_only:
             for command in (
-                ["ros2", "run", "joy", "joy_node", "--ros-args", "-p", f"device_name:={args.device_name}", "-p", "autorepeat_rate:=50.0"],
-                ["ros2", "run", "wheeltec_joy", "wheeltec_joy"],
+                ["ros2", "run", "joy", "joy_node", "--ros-args", "-p", f"device_name:={args.device_name}", "-p", "autorepeat_rate:=50.0", "-p", "deadzone:=0.0"],
             ):
                 children.append(subprocess.Popen(command, start_new_session=(os.name != "nt")))
         node.get_logger().info(
             f"{args.topic} -> 127.0.0.1:{args.port}; hold Joy buttons[{args.deadman_button}] for velocity; "
             f"buttons[{args.stop_button}] requests policy shutdown; timeout={args.timeout}s"
         )
+        if not args.bridge_only:
+            node.get_logger().info(f"Proportional Joy axes vx/vy/wz={args.axes}; full-stick scales={args.scales}; deadzone={args.deadzone}")
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass

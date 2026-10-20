@@ -26,7 +26,7 @@ python sim2real/quad_leg_free_gait3_deploy.py --keyboard
 python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latency
 ```
 
-ROS 2 手柄运行用两个终端。Jetson 的终端一启动手柄、`wheeltec_joy` 和命令桥：
+ROS 2 手柄运行用两个终端。Jetson 的终端一启动手柄和比例映射命令桥：
 
 ```bash
 bash sim2real/start_ros2_teleop.sh
@@ -40,7 +40,15 @@ bash sim2real/start_ros2_teleop.sh
 
 程序仍会先使能电机并回默认姿态。准备完成后在策略终端按空格或 Enter 开始策略，按住手柄 `buttons[4]` 才接收速度，松开则速度归零；`buttons[2]` 请求退出策略，`q` 也可退出。两个按钮索引均可在桥接启动命令中配置，物理键位须按当前手柄确认。软件停止不是硬件急停。
 
-链路为 `/joy → wheeltec_joy → /cmd_vel → bennett_cmd_bridge → 本机 UDP → 策略程序 → 电机`。ROS 2 使用系统 Python，策略继续使用自己的 Python 环境；策略进程按入口的速度范围限幅，未收到新鲜命令时归零，默认超时 0.25 s。`--ros2` 与 `--keyboard` 二选一；ROS 模式仍保留终端空格授权和 `q` 退出。
+链路为 `/joy → bennett_cmd_bridge 比例映射 → /cmd_vel → 本机 UDP → 策略程序 → 电机`。不再启动旧的 `wheeltec_joy` 映射节点。ROS 2 使用系统 Python，策略继续使用自己的 Python 环境；策略进程按入口的速度范围限幅，未收到新鲜命令时归零，默认超时 0.25 s。`--ros2` 与 `--keyboard` 二选一；ROS 模式仍保留终端空格授权和 `q` 退出。
+
+| 摇杆操作 | 速度分量 | 默认满幅速度 |
+| --- | --- | --- |
+| 右摇杆前后 | `vx`，前进为正 | ±0.25 m/s |
+| 右摇杆左右 | `vy`，左移为正 | ±0.12 m/s |
+| 左摇杆左右 | `wz`，左转为正 | ±0.5 rad/s |
+
+左摇杆前后不使用；中心死区为 5%，死区外按摇杆幅度线性增加速度，满推达到上表数值。默认轴索引为 `--axes 4 3 0`，物理方向需逐项采集确认；`--scales` 可配置三个方向的满幅速度。此轮只更改摇杆映射，START 和 B 的新操作方案尚未实现。
 
 入口脚本：
 
@@ -180,7 +188,11 @@ sim2real/
 
 - **sim2real-K9**：`--ros2` 从本机 `127.0.0.1:19761` 接收速度，策略进程按入口范围限幅；ROS 桥要求新鲜 `/joy`、按住使能键和新鲜 `/cmd_vel`，默认 0.25 s 超时归零；停止请求锁存并让策略退出。来源：`ros_command.py`、`ros2_teleop.py` 与无电机验证。失联归零针对 ROS/进程消息中断，不等于无线接收器能检测所有无线断连。
 
+- **sim2real-K10**：摇杆映射已改为独立三轴比例输入，右摇杆控制 `vx/vy`，左摇杆左右控制 `wz`；旧的 A/B 切换模式和右摇杆调速行为不再参与默认手柄链路。来源：`JoystickVelocity` 与 `ros2_teleop.py`；实际轴编号、方向及推量响应待逐项验证。
+
 ## 已完成
+
+- [x] 2026-10-20 按用户布局实现摇杆幅度到速度的线性映射，保留原有按住使能和超时归零；开始逐方向无电机验证（sim2real-K10）。
 
 - [x] 2026-10-20 增加 `--ros2` 输入、ROS 速度桥和启动脚本；Windows 的门控/限幅验证及 Jetson 的真实 ROS 2 话题到 Python 3.13 运行库验证通过，未打开电机（sim2real-K9）。
   - 首次 Windows 连续发包发现粗粒度单调时钟可能使立即到来的停止包被判为重复；已改用跨进程一致的高精度 `perf_counter`，停止包与实际 ROS 链路验证通过。
@@ -191,6 +203,9 @@ sim2real/
 - [X]  2026-10-17 策略打包进 `policies/`，入口优先用打包的策略（sim2real-K8）。
 
 ## 待完成
+
+- [ ] **sim2real-T6** 逐项验证右摇杆前后、左右及左摇杆左右的轴编号、方向、幅度响应和回中归零；本轮不运行电机（sim2real-K10）。
+- [ ] **sim2real-T7** 摇杆映射确认后，再实现并验证 START、B 的新控制流程；当前仍使用原有键盘启动与退出逻辑。
 
 - [ ]  sim2real-T1：用户在真机上试 `bennett_1_crawl_deploy.py`（T9）与 `bennett_1_free_deploy.py`（S1），结果记入本节；首次上电按用户的流程，须当次明确同意。
 - [ ]  sim2real-T2：在 Linux（Jetson）上跑 `--check_only`、`--dry_run`，确认 `.so` 绑定、键盘、IMU 串口名（sim2real-K6）。

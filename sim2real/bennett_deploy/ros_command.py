@@ -15,6 +15,27 @@ ZERO = (0.0, 0.0, 0.0)
 DEFAULT_PORT = 19761
 
 
+class JoystickVelocity:
+    """Proportional right-stick translation and left-stick yaw (ROS Joy axes)."""
+
+    def __init__(self, axes=(4, 3, 0), scales=(0.25, 0.12, 0.5), deadzone=0.05):
+        if len(axes) != 3 or any(type(i) is not int or i < 0 for i in axes):
+            raise ValueError("expected three nonnegative axis indices")
+        if not math.isfinite(deadzone) or not 0 <= deadzone < 1:
+            raise ValueError("deadzone must be between zero and one")
+        self.axes, self.scales, self.deadzone = tuple(axes), velocity(scales), deadzone
+
+    def command(self, axes: Sequence[float]) -> tuple[float, float, float]:
+        try:
+            values = velocity(tuple(axes[i] for i in self.axes))
+        except (IndexError, TypeError, ValueError, OverflowError):
+            return ZERO
+        def normalized(value):
+            magnitude = max(0.0, min(1.0, abs(value)) - self.deadzone) / (1.0 - self.deadzone)
+            return math.copysign(magnitude, value)
+        return tuple(normalized(value) * scale for value, scale in zip(values, self.scales))
+
+
 def velocity(values: Sequence[float]) -> tuple[float, float, float]:
     if len(values) != 3 or any(isinstance(v, bool) for v in values):
         raise ValueError("expected three numeric velocity values")
