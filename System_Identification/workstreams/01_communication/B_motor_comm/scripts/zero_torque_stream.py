@@ -95,6 +95,8 @@ def main() -> int:
                     help="Windows：high 把本进程设为 HIGH_PRIORITY_CLASS，检验发送尖峰是否与调度有关")
     ap.add_argument("--lite", action="store_true",
                     help="长稳用：不保存逐帧数据，只记汇总（每电机收帧数、时龄分布、发送耗时、周期、进程内存与 CPU），避免自身内存增长")
+    ap.add_argument("--bare_cb", action="store_true",
+                    help="仅与 --lite 合用：回调只数帧，不调用 SDK 自带的反馈解码（canframeCallback）。用于区分回调成本对发送抖动的贡献，不能用于部署")
     ap.add_argument("--no_gc", action="store_true", help="发送前 gc.collect() 后 gc.disable()，检验发送尖峰是不是垃圾回收造成的")
     ap.add_argument("--timer_1ms", action="store_true",
                     help="Windows：像部署程序一样调用 timeBeginPeriod(1)，把系统定时器精度从 15.6 ms 提到 1 ms")
@@ -137,7 +139,7 @@ def main() -> int:
         ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x80)
     lib = lib_info()
     stamp = datetime.now()
-    tag = ("_t1ms" if timer_set else "") + ("_pol" if pol is not None else "") + ("_dclk" if args.deploy_clock else "")         + (f"_sw{args.switch_interval * 1000:g}" if args.switch_interval is not None else "") + ("_nogc" if args.no_gc else "") + ("_q" if args.queue_send else "") + ("_hi" if args.priority == "high" else "") + ("_lite" if args.lite else "") + (f"_tail{args.tail_s:g}" if args.tail_s != 0.3 else "")
+    tag = ("_t1ms" if timer_set else "") + ("_pol" if pol is not None else "") + ("_dclk" if args.deploy_clock else "")         + (f"_sw{args.switch_interval * 1000:g}" if args.switch_interval is not None else "") + ("_nogc" if args.no_gc else "") + ("_q" if args.queue_send else "") + ("_hi" if args.priority == "high" else "") + ("_lite" if args.lite else "") + ("_bare" if args.bare_cb else "") + (f"_tail{args.tail_s:g}" if args.tail_s != 0.3 else "")
     run_id = f"{stamp.strftime('%Y%m%d_%H%M%S')}_powered_zt{int(args.rate_hz)}hz_{lib['profile']}{tag}_r{args.repeat:02d}"
     # 带策略的运行属于 C_loop_timing（控制程序节拍），其余属于 B_motor_comm
     topic = "C_loop_timing" if pol is not None else "B_motor_comm"
@@ -165,7 +167,8 @@ def main() -> int:
                 last_t[cid_] = t
             except Exception:
                 pass
-            orig_cb(device, frame)
+            if not args.bare_cb:
+                orig_cb(device, frame)
             return
         try:
             h = frame.head

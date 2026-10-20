@@ -54,8 +54,11 @@ else:
         "original": ("dlls", "6FF5CEA271F65D9C89A6A3EFFB51C923DBFE859461EC6400EE3F5852A52DDB76"),
     }
 # 缺省库：Windows 用补丁库 low_latency（官方库反馈约每 110–120 ms 一批，时龄均值约 50 ms；见根 README 01-K26、01-K27）；
-# Linux 只有官方库。原来的缺省是 original，不带参数启动会走最慢的那条路。
-DEFAULT_DM_SDK_PROFILE = "low_latency" if sys.platform == "win32" else "original"
+# Jetson（aarch64）同样缺省 low_latency（0.5 ms 副本，Jetson 实测时龄均值约 0.5 ms，官方 .so 约 47 ms 且每 100 ms 卡发令环约 14 ms，见 01-K83 至 01-K85）；
+# x86-64 的 Linux 只有官方库。原来的缺省是 original，不带参数启动会走最慢的那条路。
+DEFAULT_DM_SDK_PROFILE = (
+    "low_latency" if sys.platform == "win32" or platform.machine().lower() in ("aarch64", "arm64") else "original"
+)
 
 
 def _verify_dm_sdk_profile(profile: str) -> tuple[Path | None, str | None]:
@@ -169,7 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--dm_sdk_profile",
         choices=tuple(DM_SDK_PROFILES),
         default=DEFAULT_DM_SDK_PROFILE,
-        help="DM SDK profile (default: low_latency on Windows, original on Linux); original = vendor DLL, feedback ~110-120 ms batches",
+        help="DM SDK profile (default: low_latency on Windows and Jetson aarch64, original on x86-64 Linux); original = vendor library, feedback ~110-120 ms batches",
     )
     parser.add_argument("--imu_port", default=DEFAULT_IMU_PORT)
     parser.add_argument("--imu_baudrate", type=int, default=921600)

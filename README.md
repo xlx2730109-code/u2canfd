@@ -491,8 +491,26 @@ Jetson Orin Nano Super（aarch64 库，我自己测，30 s × 2，零力矩 1 kH
 01-K86：设备时间戳的前跳在 Jetson 上同样存在（每 30 s 约 29–40 次，约每秒一次，单电机相邻间隔中位数约 0.96 ms），说明这是盒子固件或库的问题，不是 Windows 特有，与 DeepSeek 的结论一致。
 01-K87：Jetson 上 10 分钟长稳失败（2026-10-20，我的 `--lite` 未补丁库运行，08:04:27 开始）：约 37 s 后 8 个电机的反馈全部停止（每电机只收到约 3.7 万帧，应为 60 万），脚本继续发了 600 s 的命令，其间出现过约 190 ms 的发送停顿；此后重新运行也收不到任何应答（预检 3 次都无应答，未发送零力矩帧），盒子仍在 `lsusb` 里（总线号与设备号不变，没有重新枚举）。此前 4 次各 30 s 的运行全部正常。原因未明。08:23 复查（用户说中间断过网，Jetson 仍可连、盒子仍在 `lsusb` 里）：盒子接受发送（8 次读寄存器 `send_can` 全部返回成功，ch0、ch1 都是 CAN FD 1 M / 5 M），但 1 s 内两路都没有收到任何帧，静默监听也是 0 帧；两路 8 个电机同时失联，比单个电机或单路总线故障更像电机侧断电（机器人电源或电池），也可能是盒子的两路 CAN 同时进入总线关闭，未区分；需要用户检查机器人电源与电池并重插盒子（01-T20）。该次 `lite.json` 里的时龄被静默期污染，不用；0.5 ms 副本的 10 分钟长稳因此没有做成。
 01-K88：Jetson 的部署目录 `/home/seeed/workspaces/bennett_onboard`（2026-10-20 用户新建并授权我只读，我用 `seeed` 账户只读查看，没有改动）：`u2canfd/` 是本仓库 `main` 分支的稀疏 Git 副本（只展开 `sim2real/` 与根文件，`git pull --ff-only` 同步），`lib/libusb-1.0.so.0` 是 ARM64 的 libusb 1.0.29，`policy_python.sh` 只为策略进程设置这个 libusb 的搜索路径，`.venv_policy/` 是 Python 3.13 策略环境，`ros_ws/` 是 ROS 2 手柄包（目前手柄不能控制策略、原 `/cmd_vel` 无失联保护，不能直接接电机）。T9、S1、D4 的 `--check_only` 在 Jetson 上已通过，未做实机验证；它的笔记写明 `dm_can.py` 按 CPU 架构选库，即用户已提交并拉取了我的"按架构选库"改动。所以把 0.5 ms 副本部署到 Jetson 的路径是：提交并推送 `runtime.py`、`dm_can.py`、`sdk/dlls_linux_aarch64_lowlatency/`，在 Jetson 上 `git pull --ff-only`，用 `../policy_python.sh sim2real/bennett_1_crawl_deploy.py --dm_sdk_profile low_latency ...` 运行。
-01-K89：Jetson 上的 low_latency 档位已在仓库里实现（用户给了 `sim2real/` 的编辑权限）：`runtime.py` 的 `DM_SDK_PROFILES` 按平台区分（Windows 两档，aarch64 两档，x86-64 一档），`_verify_dm_sdk_profile` 在 Linux 上校验库文件与 SHA256，`dm_can.py` 的 Linux 分支按 `BENNETT_DM_SDK_PROFILE` 选目录；新增 `sdk/dlls_linux_aarch64_lowlatency/libdm_device.so`（0.5 ms 副本，SHA256 `DA573E3B…30FEB`）；缺省仍为 `original`，待 Jetson 长稳通过后再改。Windows 上 `bennett_deploy.tests` 12 项通过、`--check_only` 通过；Jetson 上还没有用该档位跑过（见 01-K90）。
+01-K89：Jetson 上的 low_latency 档位已在仓库里实现（用户给了 `sim2real/` 的编辑权限）：`runtime.py` 的 `DM_SDK_PROFILES` 按平台区分（Windows 两档，aarch64 两档，x86-64 一档），`_verify_dm_sdk_profile` 在 Linux 上校验库文件与 SHA256，`dm_can.py` 的 Linux 分支按 `BENNETT_DM_SDK_PROFILE` 选目录；新增 `sdk/dlls_linux_aarch64_lowlatency/libdm_device.so`（0.5 ms 副本，SHA256 `DA573E3B…30FEB`）；缺省：Windows 与 Jetson（aarch64）为 `low_latency`（2026-10-20 按用户决定改，长稳尚未通过），x86-64 Linux 为 `original`。Windows 上 `bennett_deploy.tests` 12 项通过、`--check_only` 通过；Jetson 上还没有用该档位跑过（见 01-K90）。
 01-K90：Jetson 上盒子同一时间只能一个进程用：2026-10-20 我试跑 5 s 测试时，`ps` 显示 `seeed` 用户有一个 `python3 -`（DeepSeek 通过 ssh 管道运行的脚本）正在运行，我的进程随即以 libusb 断言 `pthread_mutex_lock(mutex) == 0` 失败并核心转储。此前 10 分钟长稳在约 37 s 失联、重插后的 5 s 测试在约 2.5 s 失联，都很可能是同一时间两个进程在用盒子（它的脚本退出时会失能通道），未确认；约定：同一时间只有一方使用盒子。
+01-K91：DeepSeek 报告 Jetson 上 10 分钟长稳在约 6 分钟后链路退化（周期 624 Hz、丢帧约 400 ppm），约 363 s 起 stderr 出现 `heartbeat transfer failed! error LIBUSB_ERROR_TIMEOUT`，随后盒子从 USB 总线上消失（`lsusb` 里没有，软件复位无效，只能重插），其归因是 `libdm_device.so` 内部的心跳线程在持续高负载下超时（Python 侧 `send_can` 等都返回 True，看不出来）。我只做了静态核对：aarch64 `.so`、x86 `.so`、Windows DLL 的符号里都有 `heartbeat` 类与 `heartbeat_thread_func`、`get_heartbeat_packet`；字符串 `heartbeat transfer failed! error` 只在 aarch64 `.so` 里找到，Windows DLL 里没有，与"Windows 上 10 分钟长稳（两次）从未失联、Jetson 上会失联"一致（推测，未验证）。这个问题与补丁无关（我的未补丁运行也失联），是可靠性问题：部署必须检测"设备消失"（`lsusb`、打开失败）并报警，单次采集暂以不超过 5 分钟为界；要问厂商心跳线程能否关闭或延长超时（01-T21）。我自己还没复现。
+
+01-K92：独立复跑 DeepSeek 的复跑清单（2026-10-20 09:48–10:10，Jetson，零力矩，电机失能，官方 aarch64 库，我的 `zero_torque_stream.py --lite`，30 s 每组；原始数据在 Jetson 的 `/home/claude-lab/sysid/u2canfd/.../data/raw/2026-10-20/`，运行脚本 `E:/HuanCun/AI_tmp/Claude/replay_20261020/`）：
+
+| 项 | DeepSeek | 我的复测 | 判定 |
+| --- | --- | --- | --- |
+| 逐帧 1 kHz，轻回调（只数帧、不调用 SDK 解码），发送 >3 ms 次数 | 3–9 | 6、6（`--bare_cb`） | 复现 |
+| 逐帧 1 kHz，回调带 SDK 解码（部署的真实回调），官方库 | 未测 | 284（逐调用 >3 ms），周期 >5 ms 272 次 | 新增 |
+| 逐帧 1 kHz，重回调（11 字段加 `bytes.hex`） | ≥200 | 361（逐调用），周期 290 | 复现 |
+| 10 Hz × 60 s，>3 ms | 0 | 0（4 800 次，最长 0.78 ms） | 复现，但解释不同，见下 |
+| 队列 1 kHz 零丢帧 | 0 | 官方库 6 次中 3 次丢帧（28、22 帧各 24 万帧中；约 90–120 ppm），`low_latency` 库 4 次中 1 次（7 帧） | 未复现 |
+| 队列占用低 6 倍 | p50 0.09 对 0.57 ms（每周期） | 每周期逐帧 p50 0.71 ms（8 次调用），队列单次入队极短 | 复现，但整体周期抖动无改善 |
+
+- 官方库下抖动的主因是批量交付：每 100 ms 一批数百帧回调抢 GIL，发令环停顿约 14 ms（D 组带 SDK 解码的周期间隔 112 ms 的停顿）；DeepSeek 的"轻回调"不调用 SDK 解码，低估了真实部署的抖动，所以"回调成本决定抖动"成立，但他的基线 3–9 次不是部署的基线。
+- 10 Hz 零停顿不能证明"按调用次数、不按时间"：10 Hz 下每批只有约 8 帧回调，不会有数百帧突发，是同一个机制；该结论改写为"停顿大小与每批回调帧数相关"。
+- 部署用的 `low_latency` 库（批量交付已消除）下：逐帧 1 kHz 周期 p99 1.1–1.5 ms、>5 ms 为 1–3 次、时龄 p50 0.39 ms；队列周期 p99 1.09 ms、>5 ms 为 0–2 次、时龄 p50 0.23–0.29 ms。队列没有带来可见的抖动收益，却偶发丢帧，所以部署继续用逐帧，01-T15 关闭。
+
+01-K93：Jetson `low_latency` 库长稳（我独占盒子，逐帧，`--lite`，零力矩）：1 kHz × 300 s 收 2 400 000 帧，一帧不丢，时龄 p50 0.39 ms、p99 1.25 ms，发送 >3 ms 38 次/240 万次，最长 10.1 ms；500 Hz × 300 s 收 1 200 000 帧，一帧不丢，时龄 p50 1.17 ms，最长 12.2 ms；四次 30 s 逐帧运行无丢帧。全部运行 stderr 没有 `heartbeat` 报错，盒子仍在 `lsusb` 里。DeepSeek 的心跳掉线（01-K91）今天我没有复现：两个 5 分钟长稳都干净，我此前的失联（01-K87，未补丁库、约 37 s）也没有再出现；结论仍是偶发、不可复现，成因未知。
 
 ### D. 方案
 
@@ -630,6 +648,8 @@ docs/ROBOT.md                                             机器人总览
 - [X]  2026-10-19 查明补丁库批间隔为 15.6 ms 的原因：读 DLL 反汇编，直接调用 `sleep_for` 验证，并在临时 DLL 副本上试验（01-K36 至 01-K38）。
   - 第一个猜测是测试脚本没调 `timeBeginPeriod(1)`，加上后重测无变化，排除（01-K33）。
   - 试验用 DLL、临时脚本在 `E:/HuanCun/AI_tmp/Claude/comm_diag_20261019/`，可删；`make_test_dll.py` 可重新生成。
+- [X]  2026-10-20 独立复跑 DeepSeek 的复跑清单与长稳报告：四组、队列丢帧、`low_latency` 库对照与两个 5 分钟长稳（01-K92、01-K93）。
+  - 脚本与数据副本在 `E:/HuanCun/AI_tmp/Claude/replay_20261020/`，可删；`zero_torque_stream.py` 新增 `--bare_cb`（回调不调用 SDK 解码，仅用于对照）。
 
 ## 待完成
 
@@ -649,12 +669,13 @@ docs/ROBOT.md                                             机器人总览
 - [ ]  01-T12 custom DLL（睡眠 0.5 ms）上真机前的长稳测试：Windows 上 10 分钟已做（01-K72：无丢帧、时龄 p99 1.38 ms、内存增长来自脚本自身、CPU 约 137%，单核占用的通过标准 25% 不满足）；DeepSeek 建议的 30 min × 3 次与断电重插一次未做，Jetson 为主平台，交给 DeepSeek 在 Jetson 上做；是否采用 custom DLL 由用户决定（多占 1 个核）。
 - [X]  01-T13 IMU 读法：已独立复测（01-K74），时龄最大约 1.6 ms，阻塞读收益约 0.25 ms，不改 `imu.py`。
 - [ ]  01-T14 写 `params/timing.yaml`：等 Jetson 与 IMU 的数字齐了，再把观测时龄、命令频率、库版本与哈希落成参数文件（DeepSeek I7）。
-- [ ]  01-T15 队列发送丢帧（01-K63 至 01-K67）：发送跨度降到约 1/5，但 10 次队列运行里 6 次缺帧，加长收尾无效，原因未明；暂不采用；可请 DeepSeek 在 Jetson 的 `.so` 上同样对照（`jetson_queue_ab.py` 已写好），Windows 上不再继续。
+- [X]  01-T15 队列发送丢帧（01-K63 至 01-K67）：Jetson 上也复现了偶发丢帧且无抖动收益（01-K92），不采用队列，部署用逐帧。
 - [ ]  01-T16 请用户暂时停止 `VMUSBArbService`（需要管理员权限）后重测发送尖峰（01-K56）；这是改系统设置，我不做。
-- [ ]  01-T19 DeepSeek 的 Jetson 结果需要我独立复核：已复核 IMU（01-K74）；未复核的有 Jetson 上 1 kHz 零力矩的未补丁与 0.5 ms 对比（01-K61）、`can0` 环回（需要 sudo，我的账户没有）、`gs_usb` 相关；盒子回到 Jetson 且我能访问 `seeed` 目录里的库与 libusb 1.0.29 之后复核。
+- [ ]  01-T19 DeepSeek 的 Jetson 结果需要我独立复核：已复核 IMU（01-K74）、零力矩未补丁与 0.5 ms 对比（01-K61、01-K83、01-K85）、复跑清单四组与队列（01-K92）、5 分钟长稳（01-K93）；未复核的有 `can0` 环回（需要 sudo，我的账户没有）、`gs_usb` 相关、2 kHz 不可行、750 Hz 与 10 分钟 1 kHz 重复。
 - [ ]  01-T17 补 manifest 字段的旧数据说明：17 次旧运行没有 `backend`、`lib_version`、`queue_send` 字段，按默认 `v1`、`dmcan_sdk 1.0.4`、`false`、`firmware dual_app v1.0.0.7` 理解。
 - [ ]  01-T18 在 Jetson 上验证仓库能直接用 aarch64 库：加载与选库已验证（01-K80），与盒子通信待盒子接到 Jetson 后做；libusb 版本问题我用垫片绕过，正式部署需要 libusb 1.0.27 以上（`~/mamba/envs/dm_runtime` 里有 1.0.29）。
-- [ ]  01-T20 Jetson 长稳（01-K87、01-K90）：等 DeepSeek 用完盒子后，我独占盒子重跑 10 分钟（0.5 ms 的 `low_latency` 档位，走仓库的新代码路径；再补未补丁一次）；若独占后仍在几十秒内失联，再查电源、固件与总线。通过后把 Jetson 缺省档位改为 `low_latency`，并请用户提交推送、在 Jetson 上 `git pull`（01-K88）。
+- [ ]  01-T20 Jetson 长稳（01-K87、01-K90）：`low_latency` 档位 1 kHz 与 500 Hz 各 300 s 已干净通过（01-K93）；缺省档位已改为 `low_latency`；剩余：走仓库部署代码路径的 10 分钟一次，以及请用户提交推送、在 Jetson 上 `git pull`（01-K88）。
+- [ ]  01-T21 Jetson 心跳超时导致盒子掉线（01-K91）：我独占盒子复现两次（1 kHz、500 Hz 各 300 s）均未出现（01-K93）；剩余：给部署加"设备消失"检测（`lsusb` 或打开失败时报警）；问达妙心跳线程的作用、能否关闭或延长超时；单次采集暂以不超过 10 分钟为界。
 
 ---
 
