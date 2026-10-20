@@ -44,6 +44,8 @@ def main() -> int:
     ap.add_argument("--motor", type=int, default=1, choices=sorted(MOTORS))
     ap.add_argument("--raw", type=int, default=1000, help="写入 TIMEOUT 的原始值")
     ap.add_argument("--max_wait_s", type=float, default=20.0)
+    ap.add_argument("--allow_latched_d", action="store_true",
+                    help="被测电机若停在状态码 13（上一次看门狗触发后锁存的通讯丢失，电机本身已失能）也允许开始；其余 7 个电机仍必须为 0")
     ap.add_argument("--execute", action="store_true", help="真的写寄存器、使能电机；不加则只打印计划")
     args = ap.parse_args()
 
@@ -79,7 +81,8 @@ def main() -> int:
         time.sleep(0.3)
 
     query_all()
-    bad = {c: s[1] for c, s in states.items() if s[1] != 0}
+    print("[开始前状态码] " + ", ".join(f"{c}:{states[c][1]}" if c in states else f"{c}:无应答" for c in sorted(MOTORS)))
+    bad = {c: s[1] for c, s in states.items() if s[1] != 0 and not (args.allow_latched_d and c == args.motor and s[1] == 13)}
     if len(states) != len(MOTORS) or bad:
         print(f"[中止] 开始前要求 8 个电机都应答且失能：应答 {sorted(states)}，非失能 {bad}")
         return 2

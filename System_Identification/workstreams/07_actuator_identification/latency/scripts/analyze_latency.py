@@ -35,7 +35,9 @@ def analyze(run: Path) -> dict:
     cmd = pd.read_csv(run / "commands.csv")
     fb = pd.read_csv(run / "feedback.csv")
     n_pre = int(meta["n_pre_replies"])
-    out = {"run": run.name, "aligned": bool(meta.get("aligned")), "events": len(meta["events"]), "mode": meta["mode"], "abort": meta.get("abort")}
+    # 对齐判据：使能后的应答（状态码 1）数等于主循环命令数；结尾的失能应答（状态码 0）不算
+    aligned = int((fb.state.iloc[n_pre:] == 1).sum()) == len(cmd)
+    out = {"run": run.name, "aligned": aligned, "events": len(meta["events"]), "mode": meta["mode"], "abort": meta.get("abort")}
     sig = {"tau": fb.tau.to_numpy(), "dq": fb.dq.to_numpy(), "q": fb.q.to_numpy()}
     res = {k: {"frames": [], "host_ms": []} for k in sig}
     for ev in meta["events"]:

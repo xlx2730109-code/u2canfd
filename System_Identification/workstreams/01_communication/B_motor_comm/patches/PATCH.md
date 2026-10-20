@@ -47,3 +47,13 @@ python B_motor_comm/scripts/make_test_dll.py <输出目录> 500000
 - Jetson 实测（根 README 01-K83、01-K85）：官方版时龄均值约 47 ms，0.5 ms 副本约 0.48 ms，且发令环更稳；仓库不提交 0.5 ms 副本，需要时在 Jetson 上用下面的方法重建。
 - 重建：复制 `libdm_device.so`，在偏移 `0x123B8` 写入 `20 A1 07 00`（写前断言原值为 `00 E1 F5 05`）；用同样目录结构放在另一棵目录树里运行，`dm_can.py` 按相对路径找库。
 - 加载要求：库用到 `libusb_init_context`，需要 libusb 1.0.27 以上；系统自带 1.0.25 时会报 `undefined symbol`，可在装有 libusb 1.0.29 的 conda 环境里运行，或用只转调 `libusb_init` 的垫片库（只用于测试）。
+
+### libusb 垫片（测试用）
+
+`libusbshim.c` 给 aarch64 的 `libdm_device.so` 补上 `libusb_init_context`（转调 `libusb_init`，忽略选项），用于只有系统 libusb 1.0.25 的账户做测量；部署环境有 libusb 1.0.27 以上时不需要。
+
+```bash
+gcc -shared -fPIC -o libusbshim.so libusbshim.c -lusb-1.0
+```
+
+用法：运行前 `export LD_PRELOAD=<路径>/libusbshim.so`。没有它时加载报 `undefined symbol: libusb_init_context`。

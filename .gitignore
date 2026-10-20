@@ -21,3 +21,5 @@ System_Identification/workstreams/01_communication/C_loop_timing/data/raw/**/flu
 System_Identification/workstreams/01_communication/D_obs_freshness/data/raw/**/frames.csv
 System_Identification/workstreams/01_communication/D_obs_freshness/data/raw/**/tx.csv
 System_Identification/workstreams/01_communication/D_obs_freshness/data/raw/**/flush.csv
+System_Identification/workstreams/07_actuator_identification/latency/data/raw/**/feedback.csv
+System_Identification/workstreams/07_actuator_identification/latency/data/raw/**/commands.csv

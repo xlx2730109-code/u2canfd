@@ -49,7 +49,7 @@
 **通信**【已确认】
 - USB2CANFD 双路，CAN-FD，仲裁 1 Mbps，数据 5 Mbps（部署代码 `dm_can.py` 启动时写入，CAN FD 与 BRS 都开）。2026-10-19 读到盒子当前设置：ch0 经典 CAN 1 Mbps，ch1 CAN FD 1 M / 5 M，固件 `dual_app v1.0.0.7`；部署启动会把两路都改写成 FD 1 M / 5 M。
 - CAN ID：ch0 = id 1,2,5,6（FL_thigh、FL_calf、RL_thigh、RL_calf），ch1 = id 3,4,7,8（FR、RR）；反馈 ID = 0x10 + 发送 ID。
-- 达妙官方 `libdm_device.dll`（Windows）与 Linux `.so` 里有 100 ms 批量交付常量：反馈每约 109 ms 一批，控制器拿到的角度平均旧约 55 ms。Windows 有补丁版 `dlls_lowlatency/`（改成 1 ms），Linux 未补丁。2026-10-19 在 Windows 按部署负载（1 kHz、8 电机）实测：官方库反馈时龄均值约 50 ms、最大约 124 ms；补丁库均值约 8–9 ms、最大约 30 ms；部署同款（补丁库加 `timeBeginPeriod(1)`）均值约 7 ms、最大约 16 ms；批间隔约 15.6 ms，不是 1 ms：DLL 里的 `sleep_for(1 ms)` 经 MinGW 的 winpthreads 实际睡约 15 ms，睡不足 1 ms 则不睡；临时副本改成 0.5 ms 后时龄均值约 0.6 ms、最大约 5 ms，代价是多占约 1 个核（只试验、未部署）；部署应使用补丁库（用户已在用 `--dm_sdk_profile low_latency`）；Linux 未测。
+- 达妙官方 `libdm_device.dll`（Windows）与 Linux `.so` 里有 100 ms 批量交付常量：反馈每约 109 ms 一批，控制器拿到的角度平均旧约 55 ms。Windows 有补丁版 `dlls_lowlatency/`（改成 1 ms），Linux 未补丁。2026-10-19 在 Windows 按部署负载（1 kHz、8 电机）实测：官方库反馈时龄均值约 50 ms、最大约 124 ms；补丁库均值约 8–9 ms、最大约 30 ms；部署同款（补丁库加 `timeBeginPeriod(1)`）均值约 7 ms、最大约 16 ms；批间隔约 15.6 ms，不是 1 ms：DLL 里的 `sleep_for(1 ms)` 经 MinGW 的 winpthreads 实际睡约 15 ms，睡不足 1 ms 则不睡；临时副本改成 0.5 ms 后时龄均值约 0.6 ms、最大约 5 ms，代价是多占约 1 个核（只试验、未部署）；部署应使用补丁库（用户已在用 `--dm_sdk_profile low_latency`）。Jetson（aarch64）上 2026-10-20 独立实测【已确认】：未补丁库时龄均值约 47 ms；0.5 ms 副本（仓库 `sdk/dlls_linux_aarch64_lowlatency/`）时龄 p50 0.39 ms、p99 1.25 ms，逐帧 1 kHz 跑 300 s 不丢帧；IMU 时龄最大约 1.6 ms；观测侧时序参数见 `System_Identification/params/timing.yaml`，动作侧延迟未测。
 
 **计算与传感**
 - Jetson：用户称 Nano；2026-10-19 经 SSH 读到【已确认】：NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super，主机名 seeed，Ubuntu 22.04.5，L4T R36.4.3（JetPack 6.2），aarch64，Python 3.10.12；USB 设备模式地址 192.168.55.1，登录方式见全局规则（claude-lab，无 sudo，只在 dialout 组）。2026-10-19 当时 USB 上有 DM-IMU-L1（`/dev/ttyACM0`）、键盘、鼠标、蓝牙，没有 USB2CANFD 盒；2026-10-20 用户把盒子接到了 Jetson（`34b7:6632`，设备节点权限 666），当天接回 Windows；Jetson 的 `seeed` 用户家目录里有 aarch64 的 1.x `libdm_device.so` 与 pyserial，DeepSeek 已用它跑通 1 kHz × 8 电机零力矩（我的 claude-lab 账户看不到该目录，先前说“Jetson 上没有库”是错的）。SW 里有 Nano 与 DM-ORIN NX 两种文件。+ 手柄接收器；Windows 电脑与 Jetson 都用于部署；Jetson 联网问题仍在解决【用户确认】。
@@ -125,7 +125,7 @@
 - 主循环：命令 1 kHz，策略 50 Hz；起动状态机：回默认姿态 → 预热 → 等待授权 → 策略。
 - 关节速度与 IMU 各加 12 Hz 一阶低通（训练里没有对应滤波）。
 - bennett_1 爬行变体的观测是 50 维，前 33 维同上，末 17 维是相位信息：全局相位 sin/cos（2）、各腿相位 sin/cos（8，每条腿的 sin 与 cos 相邻）、应着地标志（4）、步态参数（3：0.55 Hz、占空比 0.78、摆动高度 0.045）；相位 =（策略启动后的时间 × 0.55 Hz）取小数部分，指令为零时全部取站立值；腿序 FL→RR→FR→RL。部署端要照此生成，参考 `bennett_rl/sim2sim/configs/bennett_1_crawl.py` 与 `sim2sim/sim2sim.py` 的 crawl 模式。【已确认训练与 sim2sim 的实现，未部署】 入口已写：`sim2real/bennett_1_crawl_deploy.py`（缺省 T9）、`bennett_1_free_deploy.py`（缺省 S1），`--check_only` 通过，尚未上真机；T9 训练时无反馈滞后，官方动态库（约 109 ms）下可能不稳。
-- `--dm_sdk_profile`：缺省 Windows 为 `low_latency`（补丁版）、Linux 为 `original`（2026-10-19 起；此前缺省 `original`，不带参数会走官方库，反馈约每 110–120 ms 一批）；部署的时钟统一为 `time.perf_counter()`（此前 `time.monotonic()` 在 Python 3.11 的 Windows 上只有约 15.6 ms 精度，策略调度间隔曾是 15.6/31.2 ms 交替）。
+- `--dm_sdk_profile`：缺省 Windows 为 `low_latency`（补丁版）、Linux x86 为 `original`、Linux aarch64（Jetson）为 `low_latency`（2026-10-20 起；此前缺省都是 `original`，不带参数会走官方库，反馈约每 110–120 ms 一批）；部署的时钟统一为 `time.perf_counter()`（此前 `time.monotonic()` 在 Python 3.11 的 Windows 上只有约 15.6 ms 精度，策略调度间隔曾是 15.6/31.2 ms 交替）。
 - 软件力矩限 `--software_effort_limit_nm` 默认 0（关闭）；训练限 8 N·m，固件 TMAX 20。
 - `sim_to_motor` 符号【已确认，代码注释与用户确认入口已验证】：腿部策略沿用 `bennett_deploy` 的表（FL、RL 的 thigh 为 +1，FR_calf、RR_calf 为 −1）；`free_gait_contract.py` 注释记载 +1 在实机验证过（2026-09-05），`3_quad_leg_track.py` 里的 −1 会使步态镜像、不适用于腿部策略。不改动。
 - `技术文档_1.md` 里"关节指令乘 6"已被实测推翻。
@@ -135,7 +135,7 @@
 
 1. 通信：官方 DLL / Linux `.so` 的 100 ms 批量交付；补丁版实测反馈时龄均值约 8–9 ms、最大约 30 ms（Windows，2026-10-19）；Linux 未测；开题里的"约 36 ms"是批相位，不是常数。
 2. 电机 `TIMEOUT` = 0，上位机崩溃时电机会保持最后一条命令。
-3. 训练的执行器没有延迟、摩擦、电枢惯量（折算转子惯量约 1.2e-4 × 36 ≈ 4.4e-3，待验证）。
+3. 训练的执行器没有延迟、摩擦、电枢惯量（折算转子惯量约 1.2e-4 × 36 ≈ 4.4e-3，待验证）。【已确认】2026-10-20 实测动作侧延迟（命令到电机力矩出现）小于约 1.6 ms（1 kHz 分辨率上界，真实值未分辨），测了 `FR_calf`、`FR_thigh`、`FL_calf` 三个关节、两个通道，与关节、通道、kp 都无关（根 README 07-K8、07-K9）；训练里加 0–1 个物理步的延迟即可，摩擦、电枢惯量仍待辨识。
 4. 训练 USD 指向仍有 `_4`（见第 6 节）。
 5. 样机零位肉眼标定，误差未量化。
 6. 旧系统辨识数据（2026-09-16、09-17）用的是官方 DLL，只作线索，不进新数据集。
@@ -143,10 +143,10 @@
 8. bennett_1 爬行变体对观测滞后敏感：D4 在 100 ms 以内稳，120 ms 时会摔；官方动态库的批量交付最坏约 109 ms（动作延迟另算，训练里还没有）。
 9. bennett_1 爬行变体的后退、侧移速度对地面摩擦敏感（仿真中摩擦越大速度越低），真机地面摩擦未测，实际速度可能低于指令（`bennett_rl/README.md` K58、T34）。
 10. 部署默认 1000 Hz 发令，每帧电机回一帧，每路约 8000 帧/s，CAN FD 下负载约 45–50%，若退回经典 CAN 1 Mbps 接近饱和（推测，待实测）。
-11. 仓库里的 Linux `libdm_device.so` 是 x86-64，Jetson 是 arm64，不能直接加载；Jetson 上 `seeed` 用户家目录里有自己的 aarch64 版（加载需 libusb 1.0.29），尚未纳入仓库；Linux 上未补丁的库同样有 100 ms 批量交付（时龄均值约 49 ms），把常量改成 0.5 ms 后时龄均值约 0.4 ms，但发令环抖动变大（DeepSeek 实测，未独立复现）。
+11. 仓库里 `sdk/dlls/` 的 Linux `.so` 是 x86-64，Jetson 是 arm64，所以另放了 aarch64 版 `sdk/dlls_linux_aarch64/` 与 0.5 ms 副本 `sdk/dlls_linux_aarch64_lowlatency/`（加载需 libusb 1.0.27 以上，系统自带 1.0.25 会报 `undefined symbol`）；未补丁库同样有 100 ms 批量交付（时龄均值约 47 ms，且每 100 ms 让发令环停顿约 14 ms），改成 0.5 ms 后时龄均值约 0.4 ms、发令环更稳（我独立实测；DeepSeek 报告的"抖动变大"是他的回调不做 SDK 解码所致，根 README 01-K92）。
 12. 反馈新鲜度用的是主机回调时刻，没有用帧自带时间戳（帧头时间戳单位为 ns，但有跳变）；部署环境 Python 3.11 的 `time.monotonic()` 在 Windows 上分辨率约 15.6 ms，部署日志里的反馈时龄只有 0 或 16 ms 两档，真实时龄要用 `perf_counter` 算（策略 tick 处均值约 6.6 ms）。
 13. 12 Hz 观测低通：`bennett_1_*` 训练端与运行时一致；缺省策略 `go2-10` 以及 `trot1`、`free_gait3` 训练端没有，而运行时缺省仍加 12 Hz（约 13.3 ms 滞后），原先不提示，2026-10-20 起启动时打印提示；用户称 `go2-10` 真机迁移很好，是带滤波的情况，是否关闭由用户定。
-14. Windows 上发令环有不规则的 10–20 ms 停顿（每 30 s 约 6–9 次，与负载无关，提高进程优先级可减半）；Python 3.11 逐帧发送 8 个电机的上限约 1.37 kHz；`fill_can_queue`/`send_can_queue` 队列发送能把每周期发送耗时降到约 1/5，但 10 次里 6 次缺帧，不可用（2026-10-20，Windows）。
+14. Windows 上发令环有不规则的 10–20 ms 停顿（每 30 s 约 6–9 次，与负载无关，提高进程优先级可减半）；Python 3.11 逐帧发送 8 个电机的上限约 1.37 kHz；`fill_can_queue`/`send_can_queue` 队列发送能把每周期发送耗时降到约 1/5，但 Windows 10 次里 6 次缺帧、Jetson 官方库 6 次里 3 次缺帧（0–100 ppm），且在 `low_latency` 库下没有抖动收益，不采用（2026-10-20）。
 15. 看门狗：8 台电机 `TIMEOUT` 都是 0（读两遍确认）；上地面前必须开，单位未核实（可能 50 µs 或 ms），已写好测试脚本（根 README 01-K75、01-T8）。
 16. 【用户确认】用户称之前在 Jetson 上复现过并成功迁移（`go2-10` 等）；DeepSeek 称当时 Jetson 只有未补丁的 `.so`（未核实），若属实则那些成功是在平均约 49 ms、最大约 100 ms 的反馈时龄下取得的（根 README 01-K77）。
 
@@ -197,3 +197,4 @@
 - 两个仓库（u2canfd、bennett_rl）的代码必须 Windows 与 Linux 都能跑，用 `pathlib`，LF 换行，Windows 专属的东西用 `sys.platform` 判断。
 - 临时文件放 `E:\HuanCun\AI_tmp\Claude\任务简称_日期\`。
 - 有工作量大的任务，用 README 笔记（基准与结论 / 已完成 / 待完成），格式见全局规则。
+17. 【已确认】Jetson 上盒子偶发从 USB 总线消失（DLL 内置心跳线程报 `heartbeat transfer failed! error LIBUSB_ERROR_TIMEOUT`，DeepSeek 约 13 次会话 2 次，我 2026-10-20 复现了一次：1 kHz × 600 s 在 61 s 反馈全停、盒子仍在 `lsusb` 里但不转发 CAN；1 kHz 5 分钟以上约一半失败，500 Hz 目前 0/4，建议部署发令降到 500 Hz（01-K94、01-T22）），只能拔插；部署靠反馈超时（缺省 0.5 s）发现，盒子消失后失能命令发不出，电机保持最后一条命令，根本保护是电机看门狗（第 15 项，根 README 01-K91、01-T21）。

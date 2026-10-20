@@ -1,0 +1,56 @@
+# 观测侧与发令侧时序参数（工作包 01_communication）。
+# 版本 v1，生成 2026-10-20。来源与编号见根 README.md 的 01-K 条目。
+# 条件：Jetson Orin Nano Super（aarch64），盒子固件 dual_app v1.0.0.7，零力矩失能流，1 kHz 逐帧发令。
+# 电池：未使用电池（零力矩测试，电机上电但失能）。
+version: 1
+date: 2026-10-20
+platform: jetson_aarch64
+dm_sdk_profile: low_latency            # runtime.py 在 Jetson 与 Windows 的缺省档位
+library:
+  file: sim2real/sdk/dlls_linux_aarch64_lowlatency/libdm_device.so
+  sha256: DA573E3B874BBFBEE974323068C36B5CC5FBD14FA91F51E1EF1ED4115F530FEB
+  patch: 偏移 0x123B8 的 4 字节 100 ms 改为 0.5 ms（B_motor_comm/patches/PATCH.md）
+command_rate_hz: 500                   # 建议值（01-K94）；部署缺省仍是 1000，待用户决定；策略 50 Hz
+confidence: 中                          # 主机侧测量，已核实；电机内部与动作侧延迟未测
+
+observation:                           # 观测侧（主机侧）延迟
+  joint_feedback_age_ms:               # 回调时刻到发令环读取时刻
+    p50: 0.39
+    p99: 1.25
+    source: 01-K93（1 kHz x 300 s，240 万帧，无丢帧）
+  imu_age_ms:
+    max: 1.6                           # 部署现用的轮询读法，在 50 Hz 取样点上取，空闲负载，各 30 s x 2；阻塞读为 1.07
+    source: 01-K74                     # DeepSeek 在另一条件下测到轮询 max 8.96、阻塞读 0.96（未对账，01-T23）
+  library_original_age_ms:             # 官方未补丁库，仅供对照，不得用于部署
+    mean: 47
+    p99: 99
+    source: 01-K83
+policy_step_ms: 20
+policy_hold_ms: 10                     # 50 Hz 零阶保持均值，最坏 20
+inference_ms: {p50: 0.021, p99: 0.033}   # TorchScript，CPU 单线程（DeepSeek 实测，未独立复核）
+
+send_loop:
+  period_p99_ms: 1.1-1.5               # low_latency 逐帧 1 kHz，01-K92，周期指发令环相邻两圈的间隔
+  cycles_over_5ms_per_30s: 1-3         # 阈值是周期 > 5 ms；DeepSeek 的统计口径是单次发送 > 3 ms，两者不能直接比
+  worst_call_ms: 10-12                 # 偶发阻塞，成因未明（01-T5）
+  frame_loss_ppm: 0                    # 逐帧发送 5 次运行无丢帧，01-K92、01-K93
+
+action:                                # 动作侧
+  command_to_torque_closed_loop_ms: "<1.6"        # 位置阶跃（kp 28，闭环），1 kHz 分辨率上界，不是物理量，真实值推测 <1 ms 未分辨；三个关节、两个通道（07-K8、07-K9、07-K10）
+  command_to_torque_open_loop_ms: "<2.6"          # 力矩脉冲（kp 0，kd 2）0.5 N·m，只有 500 Hz 的有效数据；kd=0 与 1 kHz 待补（01-T24）
+  torque_to_motion_ms: 4.4-5.3         # 力矩出现到速度、位置超出噪声（物理过程，随 kp 变，kp 28 时）
+  confidence: 中                        # 闭环三个关节一致；开环只有一个关节、500 Hz
+  watchdog_timeout: 0                  # 8 台电机的 RID 9 全为 0（未启用），01-K75
+
+reliability:
+  device_disappearance: 1 kHz 持续 5 分钟以上 3/6 失联（反馈全停、需拔插），500 Hz 0/4（DeepSeek 合并统计称 1 kHz 约 2/3、500 Hz 0/6，待逐条对账），成因未知（01-K91、01-K94）
+  detection: 部署的 motor_feedback_timeout_s 缺省 0.50 s，超时抛错（代码核对，未实测）
+
+host_constraints:                      # 来自 DeepSeek（JETSON_GIL_AND_LOAD.md，官方未补丁库，零力矩），未独立复核（01-T23）
+  cpu_bound_python_thread: forbidden   # 纯 Python 死循环线程把 1 kHz 环压到 23 Hz（每圈 41 ms）
+  switch_interval_s: 0.0005            # 只能把 23 Hz 救到 186 Hz
+  periodic_light_worker: ok            # 带 sleep 的周期轻任务无害（1000 Hz，p99 0.89 ms）
+bus:                                   # 同上来源，未独立复核
+  payload_8B_loss_ppm: 0
+  payload_64B_loss_ppm: 238            # 部署用 8 字节，不受影响，说明总线余量有限
+  max_command_rate_hz: 1000            # 2000 Hz 实测只到 1565 Hz（DeepSeek 01-K61 之后的套件）

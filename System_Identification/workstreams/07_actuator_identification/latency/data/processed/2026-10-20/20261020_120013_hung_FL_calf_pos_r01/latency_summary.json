@@ -1,0 +1,52 @@
+{
+ "run": "20261020_120013_hung_FL_calf_pos_r01",
+ "aligned": true,
+ "events": 30,
+ "mode": "pos",
+ "abort": null,
+ "tau": {
+  "n_responded": 30,
+  "latency_frames": {
+   "p10": 1.0,
+   "median": 1.0,
+   "p90": 2.0,
+   "min": 1,
+   "max": 2
+  },
+  "host_ms": {
+   "median": 1.558959,
+   "p10": 1.2971256,
+   "p90": 2.443394
+  }
+ },
+ "dq": {
+  "n_responded": 30,
+  "latency_frames": {
+   "p10": 4.9,
+   "median": 5.0,
+   "p90": 6.0,
+   "min": 4,
+   "max": 6
+  },
+  "host_ms": {
+   "median": 5.481535,
+   "p10": 5.1498235,
+   "p90": 6.323516
+  }
+ },
+ "q": {
+  "n_responded": 30,
+  "latency_frames": {
+   "p10": 5.0,
+   "median": 6.0,
+   "p90": 7.0,
+   "min": 5,
+   "max": 7
+  },
+  "host_ms": {
+   "median": 6.423678,
+   "p10": 5.469437699999999,
+   "p90": 7.3370187
+  }
+ }
+}

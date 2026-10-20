@@ -1,0 +1,174 @@
+{
+ "run_id": "20261020_115717_hung_FR_thigh_pos_r01",
+ "motor": 3,
+ "name": "FR_thigh",
+ "mode": "pos",
+ "amp": 0.05,
+ "tau": 0.3,
+ "pulse_ms": 40.0,
+ "kp": 28.0,
+ "kd": 2.0,
+ "events": [
+  {
+   "cmd_index": 500,
+   "sign": 1,
+   "t_host_ns": 1703962561230
+  },
+  {
+   "cmd_index": 1249,
+   "sign": -1,
+   "t_host_ns": 1705460560240
+  },
+  {
+   "cmd_index": 2247,
+   "sign": 1,
+   "t_host_ns": 1707456558920
+  },
+  {
+   "cmd_index": 3215,
+   "sign": -1,
+   "t_host_ns": 1709392562058
+  },
+  {
+   "cmd_index": 4006,
+   "sign": 1,
+   "t_host_ns": 1710974560490
+  },
+  {
+   "cmd_index": 4880,
+   "sign": -1,
+   "t_host_ns": 1712722561842
+  },
+  {
+   "cmd_index": 5738,
+   "sign": 1,
+   "t_host_ns": 1714438561408
+  },
+  {
+   "cmd_index": 6668,
+   "sign": -1,
+   "t_host_ns": 1716298567250
+  },
+  {
+   "cmd_index": 7646,
+   "sign": 1,
+   "t_host_ns": 1718254561311
+  },
+  {
+   "cmd_index": 8379,
+   "sign": -1,
+   "t_host_ns": 1719720560922
+  },
+  {
+   "cmd_index": 9089,
+   "sign": 1,
+   "t_host_ns": 1721140560295
+  },
+  {
+   "cmd_index": 10082,
+   "sign": -1,
+   "t_host_ns": 1723126561211
+  },
+  {
+   "cmd_index": 10935,
+   "sign": 1,
+   "t_host_ns": 1724832562624
+  },
+  {
+   "cmd_index": 11903,
+   "sign": -1,
+   "t_host_ns": 1726768560287
+  },
+  {
+   "cmd_index": 12604,
+   "sign": 1,
+   "t_host_ns": 1728170560688
+  },
+  {
+   "cmd_index": 13460,
+   "sign": -1,
+   "t_host_ns": 1729882560196
+  },
+  {
+   "cmd_index": 14413,
+   "sign": 1,
+   "t_host_ns": 1731788560076
+  },
+  {
+   "cmd_index": 15194,
+   "sign": -1,
+   "t_host_ns": 1733350559567
+  },
+  {
+   "cmd_index": 16225,
+   "sign": 1,
+   "t_host_ns": 1735412559086
+  },
+  {
+   "cmd_index": 17241,
+   "sign": -1,
+   "t_host_ns": 1737444561536
+  },
+  {
+   "cmd_index": 17952,
+   "sign": 1,
+   "t_host_ns": 1738866561005
+  },
+  {
+   "cmd_index": 18662,
+   "sign": -1,
+   "t_host_ns": 1740286561288
+  },
+  {
+   "cmd_index": 19553,
+   "sign": 1,
+   "t_host_ns": 1742068559540
+  },
+  {
+   "cmd_index": 20582,
+   "sign": -1,
+   "t_host_ns": 1744126560349
+  },
+  {
+   "cmd_index": 21416,
+   "sign": 1,
+   "t_host_ns": 1745794561466
+  },
+  {
+   "cmd_index": 22193,
+   "sign": -1,
+   "t_host_ns": 1747348558621
+  },
+  {
+   "cmd_index": 23041,
+   "sign": 1,
+   "t_host_ns": 1749044560618
+  },
+  {
+   "cmd_index": 23753,
+   "sign": -1,
+   "t_host_ns": 1750468562142
+  },
+  {
+   "cmd_index": 24532,
+   "sign": 1,
+   "t_host_ns": 1752026562264
+  },
+  {
+   "cmd_index": 25386,
+   "sign": -1,
+   "t_host_ns": 1753734562650
+  }
+ ],
+ "abort": null,
+ "q0": 0.0997558556496525,
+ "n_pre_replies": 264,
+ "n_cmds_main": 25688,
+ "n_replies_total": 25957,
+ "aligned": true,
+ "dll": "low_latency",
+ "timeout_ms": 300.0,
+ "timeout_raw": 6000,
+ "rate_hz": 500.0,
+ "note": "反馈第 j 个对应命令第 j 个（有一个固定偏移，由分析脚本用使能后的第一个应答对齐）"
+}
