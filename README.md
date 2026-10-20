@@ -1069,27 +1069,114 @@ docs/ROBOT.md                                             机器人总览
 
 ## 基准与结论
 
-### A. 命令
+### A. 运行命令
 
-在 `u2canfd/` 下运行（在 `sim2real/` 下运行时去掉 `sim2real/` 前缀）；用装有 torch 的环境（`env_isaaclab`）。**`--check_only` 与 `--dry_run` 不使能电机、不发运动命令；其余命令会连接并驱动真机，须用户当次明确同意。**
+本节使用已配置的 Jetson 总目录 `~/workspaces/bennett_onboard/`。`../policy_python.sh` 自动选用本目录的策略 Python 环境并设置 USB 库路径，后面的 `.py` 是实际策略程序。手柄模式用 `--ros2`，键盘模式用 `--keyboard`。
 
-不开电机的校验与试运行：
+#### 1. 进入目录
 
+两个终端都先进入 Git 仓库；后续命令均在此目录运行：
+
+```bash
+cd ~/workspaces/bennett_onboard/u2canfd
 ```
-python sim2real/bennett_1_crawl_deploy.py --check_only
-python sim2real/bennett_1_crawl_deploy.py --dry_run --keyboard
-python sim2real/bennett_1_free_deploy.py --check_only
-python sim2real/tools/dev_sn.py
+
+#### 2. ROS 2 手柄运行
+
+终端一：启动手柄和命令桥。
+
+```bash
+bash sim2real/start_ros2_teleop.sh
 ```
 
-真机运行（开电机）：
+终端二：策略启动命令。
 
+```bash
+../policy_python.sh sim2real/bennett_1_free_deploy.py --ros2
+../policy_python.sh sim2real/bennett_3_free_deploy.py --ros2
+../policy_python.sh sim2real/bennett_1_crawl_deploy.py --ros2
+../policy_python.sh sim2real/quad_leg_go2-10_deploy.py --ros2
+../policy_python.sh sim2real/quad_leg_trot1_deploy.py --ros2
+../policy_python.sh sim2real/quad_leg_free_gait3_deploy.py --ros2
+../policy_python.sh sim2real/quad_leg_free_gait4_deploy.py --ros2
 ```
-python sim2real/bennett_1_crawl_deploy.py --keyboard
-python sim2real/bennett_1_free_deploy.py --keyboard
-python sim2real/quad_leg_free_gait3_deploy.py --keyboard
-python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latency
+
+策略终端显示等待后，将两个摇杆回中、松开 L1，长按 START 1 秒。程序此前不会打开 IMU 或使能电机；收到本次启动后的新 START 事件，才进入默认姿态并运行策略。不要在策略终端进入等待之前按 START。
+
+| 按键 | 功能 |
+| --- | --- |
+| START，`buttons[9]` | 摇杆回中、L1 松开时长按 1 秒，启动或恢复控制 |
+| L1/LB，`buttons[4]` | 按住才接收摇杆速度；松开速度归零 |
+| B，`buttons[1]` | 速度归零并锁住输入，重新长按 START 才恢复 |
+| 策略终端 `q` 或 Esc | 请求退出程序 |
+
+B 和松开 L1 都只控制速度输入，策略仍可调整腿部；默认姿态过程也不由 B 取消。软件停止不是硬件急停。ROS 模式不再接受终端 Enter/空格作为启动，其他手柄按键不分配功能。
+
+链路为 `/joy → bennett_cmd_bridge 比例映射 → /cmd_vel → 本机 UDP → 策略程序 → 电机`。不再启动旧的 `wheeltec_joy` 映射节点。ROS 2 使用系统 Python，策略继续使用自己的 Python 环境；策略进程按入口范围限幅，默认 0.25 s 消息超时归零；手柄消息中断后需重新长按 START 解锁。`--ros2` 与 `--keyboard` 二选一。
+
+| 摇杆操作 | 速度分量 | 默认满幅速度 |
+| --- | --- | --- |
+| 右摇杆前后 | `vx`，前进为正 | ±0.25 m/s |
+| 右摇杆左右 | `vy`，左移为正 | ±0.12 m/s |
+| 左摇杆左右 | `wz`，左转为正 | ±0.5 rad/s |
+
+左摇杆前后不使用；中心死区为 5%，中位补偿后在死区外按摇杆幅度线性增加速度，满推达到上表数值。当前轴索引为 `--axes 3 2 0`；右摇杆前后对应轴 3、左右对应轴 2，左摇杆左右对应轴 0，已完成逐项实际输入验证。`--scales` 配置满幅速度，`--centers` 配置对应三轴的原始中位读数；当前 TGZ 使用 `0 0.403943 0`，换手柄或模式后需重新核对。
+
+#### 3. 键盘运行
+
+键盘模式会先使能电机并回到默认姿态，准备完成后按空格或 Enter 开始策略；不需要启动手柄桥。键盘与手柄模式二选一。
+
+运行自由步态 S1：
+
+```bash
+../policy_python.sh sim2real/bennett_1_free_deploy.py --keyboard
 ```
+
+运行自由步态 bennett_3（按辨识执行器模型训练，K37）：
+
+```bash
+../policy_python.sh sim2real/bennett_3_free_deploy.py --keyboard
+```
+
+运行爬行 T9：
+
+```bash
+../policy_python.sh sim2real/bennett_1_crawl_deploy.py --keyboard
+```
+
+运行旧版自由步态 gait3：
+
+```bash
+../policy_python.sh sim2real/quad_leg_free_gait3_deploy.py --keyboard
+```
+
+缺省已按平台选低延迟库（Windows、Jetson 为 `low_latency`）；需要显式指定时使用以下 T9 命令：
+
+```bash
+../policy_python.sh sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latency
+```
+
+#### 4. 指定新策略
+
+保持手柄模式，选择同类新 run 的导出文件；将 `my_new_run` 换成实际目录名：
+
+```bash
+../policy_python.sh sim2real/bennett_1_free_deploy.py --ros2 --policy sim2real/policies/my_new_run/exported/policy.pt
+```
+
+新 run 必须同时包含同次训练的 `params/env.yaml`、`params/agent.yaml`；爬行策略换用 `bennett_1_crawl_deploy.py` 入口。
+
+#### 5. 拉取更新
+
+Windows 提交并推送后，在本节指定的 Git 仓库内拉取：
+
+```bash
+git pull --ff-only
+```
+
+Jetson 当前只展开 `sim2real/` 和仓库根文件；Windows 中其他目录未展开，因此资源管理器里的目录列表不同。拉取会保留该范围，Git 跟踪的文件仍会随远端提交更新或删除；本机有改动或冲突时先处理，不强制覆盖。上一级的策略环境、USB 库和 ROS 工作区不属于该 Git 副本。
+
+#### 6. 入口与参数
 
 入口脚本：
 
@@ -1097,6 +1184,7 @@ python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latenc
 | --- | --- |
 | `bennett_1_crawl_deploy.py` | bennett_1 爬行变体，缺省 T9，与 sim2sim 配置 `bennett_1_crawl` 一致 |
 | `bennett_1_free_deploy.py` | bennett_1 自由步态，缺省 S1，与 sim2sim 配置 `bennett_1_free` 一致 |
+| `bennett_3_free_deploy.py` | bennett_3 自由步态，缺省 `policies/bennett_3_free_V5`，与 sim2sim 配置 `bennett_3_free` 一致 |
 | `quad_leg_free_gait3_deploy.py`、`quad_leg_free_gait4_deploy.py` | 旧的自由步态策略，取 `quad_leg_free_gait` 下最新导出 |
 | `quad_leg_go2-10_deploy.py`、`quad_leg_trot1_deploy.py` | go2-10、trot1 |
 
@@ -1104,10 +1192,9 @@ python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latenc
 
 | 参数 | 作用 |
 | --- | --- |
+| `--ros2` | 手柄输入，等待本次接收器创建后的新 START 长按事件，再初始化 IMU 与电机 |
 | `--keyboard` | 键盘给速度指令；电机回到默认姿态并预热后，按空格或回车才启动策略 |
-| `--check_only` | 只校验训练配置与 TorchScript 策略，不打开 IMU 与电机 |
-| `--dry_run` | 读 IMU、跑策略，不打开电机 |
-| `--dm_sdk_profile original` / `low_latency` | 选电机动态库：缺省 Windows 为 `low_latency`、Linux 为 `original`（2026-10-19 起，此前缺省 `original`）；`original` 为官方版，反馈约每 110–120 ms 一批；`low_latency` 为补丁版，反馈时龄均值约 7 ms（01-K27），仅 Windows 有。用 T9 等训练时没加滞后的策略、真机迟钝或摔倒时再试 |
+| `--dm_sdk_profile original` / `low_latency` | 选择当前平台已配置的电机动态库；Jetson 使用 ARM64 `.so`，具体版本见运行时打印的 `[DM-SDK]` |
 | `--imu_port <串口>` | IMU 串口；Windows 缺省 `COM6`，Linux 缺省 `/dev/ttyACM0`（推测），以实际枚举为准 |
 | `--output_scale <0–1>` | 策略动作的缩放，首次试验取小值 |
 | `--active_joints rr` | 只驱动 RR 的两个关节，缺省 `all` |
@@ -1118,7 +1205,9 @@ python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latenc
 - 键盘：`w`/`s` 前后，`a`/`d` 侧移，`j`/`l` 转向，`0`/`x` 清零，空格或回车授权策略，`q` 或 Esc 退出；指令范围缺省取各策略的训练范围。
 - 策略已打包在 `sim2real/policies/`，缺省不需要 `bennett_rl`，整个 `sim2real/` 拷到另一台电脑即可运行；另需 Python（含 torch）、pyserial、pyusb、dmcan-sdk，Linux 另需 libusb（见 `docs/WORKFLOW.md`）。
 - 换 bennett_1 的策略：环境变量 `BENNETT1_CRAWL_RUN=T9|D4`、`BENNETT1_FREE_RUN=S1`（打包的别名），或 `bennett_rl/logs/rsl_rl/` 下的完整运行目录名，或 `--policy`。
+- 换 bennett_3 的策略：环境变量 `BENNETT3_FREE_RUN=<运行目录名>`（`bennett_rl/logs/rsl_rl/bennett/bennett_3/flat/` 下），或 `--policy`；缺省使用打包的 `policies/bennett_3_free_V5`。
 - 打包的策略找不到时才去 `bennett_rl` 找：环境变量 `BENNETT_RL_ROOT`，否则取同级目录 `bennett_rl`，再否则取本仓库所在盘符下的 `Project/Isaaclab/bennett_rl`。
+- Windows 在已配置依赖的 Python 环境中运行同一入口，将本节命令的 `../policy_python.sh` 换成 `python`；该 `.sh` 是 Jetson 总目录的启动包装，不是另一套策略。
 
 ### B. 文件夹结构
 
@@ -1136,7 +1225,8 @@ sim2real/
 │   ├── input.py                   键盘速度指令（Windows 用 msvcrt，Linux 用 termios）
 │   ├── paths.py                   路径解析：打包的策略优先，其次训练仓库
 │   ├── policy.py                  50 维观测拼装与策略推理
-│   ├── runtime.py                 主程序：参数、安全启动、1 kHz 控制环、50 Hz 策略
+│   ├── ros_command.py             ROS 本机速度接收、限幅、超时与手柄使能门控
+│   ├── runtime.py                 主程序：参数、安全启动、500 Hz 控制环（缺省）、50 Hz 策略
 │   ├── tests.py                   部署核心单元测试
 │   ├── trot1_contract.py          trot1 契约
 │   ├── trot1_gait.py              trot1 步态时钟
@@ -1146,6 +1236,7 @@ sim2real/
 ├── policies/                      已打包的策略，只含 exported/policy.pt 与 params/*.yaml，免去引用 bennett_rl
 │   ├── bennett_1_crawl_D4/        bennett_1 爬行，D4（滞后 0–5 步训练）
 │   ├── bennett_1_crawl_T9/        bennett_1 爬行，T9（缺省）
+│   ├── bennett_3_free_V5/         bennett_3（V5 执行器模型）自由步态，训练到第 1200 步（2026-10-20，策略哈希前 16 位 54e0b058846fe3d0），用 `bennett_1_free_deploy.py --policy policies/bennett_3_free_V5/exported/policy.pt`
 │   ├── bennett_1_free_S1/         bennett_1 自由步态，S1（缺省）
 │   ├── free_gait3/                free_gait3
 │   ├── go2-10/                    go2-10
@@ -1153,18 +1244,23 @@ sim2real/
 ├── sdk/                           达妙动态库
 │   ├── dlls/                      官方版（反馈每约 110–120 ms 一批）与 Linux x86-64 `.so`
 │   ├── dlls_linux_aarch64/        Linux aarch64（Jetson）版 `libdm_device.so`，1.x 接口，需要 libusb 1.0.27 以上
-│   ├── dlls_lowlatency/           补丁版（批量延迟改为 1 ms，反馈时龄均值约 7 ms，无 Linux 版）
+│   ├── dlls_linux_aarch64_lowlatency/  Jetson 补丁版（睡眠常量 100 ms 改为 0.5 ms，反馈时龄约 0.4 ms）
+│   ├── dlls_lowlatency/           Windows 补丁版（批量延迟改为 1 ms，反馈时龄均值约 7 ms）
 │   └── libusb-1.0.dll
 ├── tools/
 │   ├── 0_Return_to_zero.py        8 电机限速安全回零
-│   └── dev_sn.py                  列出 USB-CANFD 设备
+│   ├── dev_sn.py                  列出 USB-CANFD 设备
+│   └── start_detached.sh          Jetson 脱机启动：手柄桥与策略放后台，日志写本机，可拔 USB 数据线（sim2real-K36）
 ├── bennett_1_crawl_deploy.py      bennett_1 爬行变体入口（缺省 T9）
 ├── bennett_1_free_deploy.py       bennett_1 自由步态入口（缺省 S1）
+├── bennett_3_free_deploy.py       bennett_3 自由步态入口（缺省 `policies/bennett_3_free_V5`）
 ├── quad_leg_free_gait3_deploy.py  自由步态 gait3 入口
 ├── quad_leg_free_gait4_deploy.py  自由步态 gait4 入口
 ├── quad_leg_go2-10_deploy.py      go2-10 入口（缺省策略）
 ├── quad_leg_trot1_deploy.py       trot1 入口
-└── README.md                      本文件
+├── README.md                      本文件
+├── ros2_teleop.py                 ROS 2 手柄速度桥，可同时启动现有手柄节点
+└── start_ros2_teleop.sh           加载 Jetson ROS 环境并启动手柄链路
 ```
 
 ### C. 迁移对照
@@ -1178,13 +1274,14 @@ sim2real/
 | `dev_sn.py` | `tools/` | 无改动 |
 | `WORKFLOW.md` | `docs/` | 无改动 |
 | 新写 | `bennett_1_crawl_deploy.py`、`bennett_1_free_deploy.py` | bennett_1 的 T9、S1 入口 |
+| 新写 | `bennett_3_free_deploy.py` | bennett_3 的入口，缺省策略为 `policies/bennett_3_free_V5` |
 | `bennett_rl/logs/rsl_rl/` 下的 6 个运行目录 | `policies/` | 只取 `exported/policy.pt`、`params/env.yaml`、`params/agent.yaml`，来源见 E |
 
 ### D. 相对原件的改动
 
 | 文件 | 改动 |
 | --- | --- |
-| `runtime.py` | 动态库目录改为 `sdk/`；缺省策略改为打包的 `policies/go2-10`，没有再取 `bennett_rl`；IMU 缺省串口按平台取值；Linux 上选 `low_latency` 报错；打印训练与运行时的观测低通对比；退出时恢复终端 |
+| `runtime.py` | 动态库目录改为 `sdk/`；缺省策略改为打包的 `policies/go2-10`，没有再取 `bennett_rl`；IMU 缺省串口按平台取值；`--control_rate_hz` 缺省 500；打印训练与运行时的观测低通对比；退出时恢复终端 |
 | `dm_can.py` | 动态库目录改为 `sdk/`；Linux 上把 dmcan 的后端库绑定到 `sdk/dlls/libdm_device.so`，不再依赖启动目录 |
 | `contract.py`、`free_gait_contract.py` | 关节位置、速度观测同时接受官方函数与 bennett_1 的 `filtered_observation` 包装（内层函数仍须相同） |
 | `input.py` | 新增 Linux 键盘读取（termios，按键与 Windows 一致）；`parse_posix_keys` 可单测 |
@@ -1199,6 +1296,7 @@ sim2real/
 | `bennett_1_crawl_T9` | `bennett_1/crawl/2026-10-16_13-10-20_t9_same` | `bennett_1_crawl_deploy.py` 缺省 |
 | `bennett_1_crawl_D4` | `bennett_1/crawl/2026-10-16_15-13-42_d4_delay5` | `BENNETT1_CRAWL_RUN=D4` |
 | `bennett_1_free_S1` | `bennett_1/flat/2026-10-16_05-53-35` | `bennett_1_free_deploy.py` 缺省 |
+| `bennett_3_free_V5` | `bennett/bennett_3/flat/2026-10-20_16-38-16`（`model_1200`） | `bennett_3_free_deploy.py` 缺省 |
 | `free_gait3` | `quad_leg_free_gait/quad_leg_free_gait3/flat/2026-09-05_07-07-11` | `quad_leg_free_gait3_deploy.py`、`quad_leg_free_gait4_deploy.py` |
 | `go2-10` | `quad_leg_go2/quad_leg_go2-10/flat/2026-07-19_18-41-26` | `quad_leg_go2-10_deploy.py` |
 | `trot1` | `quad_leg_trot/quad_leg_trot1/flat/2026-07-27_20-08-08` | `quad_leg_trot1_deploy.py` |
@@ -1220,11 +1318,117 @@ sim2real/
 - sim2real-K3：关节符号表 `sim_to_motor` 沿用原文件（FR_calf、RR_calf 为 −1，其余 +1），不改动。`free_gait_contract.py` 的注释记载：FL、RL 的 thigh 取 +1 在实机验证过（2026-09-05），`3_quad_leg_track.py` 的 −1 会使步态镜像、不适用于腿部策略；入口已由用户验证。
 - sim2real-K4：训练配置差异：go2-10 的执行器为力矩限 7 N·m、饱和 12 N·m、速度限 30 rad/s，bennett_1 为 8、20、20。
 - sim2real-K5：缺省策略的已知性质（来自 `bennett_rl/README.md`）：T9 训练时没有加反馈滞后，滞后 80 ms 开始变差、100 ms 失效；官方动态库的反馈约 109 ms 一批，所以用 T9 时建议用补丁版（Windows，`--dm_sdk_profile low_latency`），或换 D4（K54）。S1 前进时四脚抬高 27–41 mm，两脚同时着地约占 20%（K53）。
-- sim2real-K6：Linux 部分只做了静态检查与键盘解析单测，未在 Linux 上运行：`.so` 绑定、termios 键盘、串口名、`low_latency` 无 Linux 版。
-- sim2real-K7：`dm_sdk_profile` 缺省：Windows 为 `low_latency`，Linux 为 `original`（2026-10-19 起；此前缺省 `original`）；补丁版的反馈时龄见 01-K27。
+- sim2real-K6：Jetson 上已用 `claude-lab` 账户对 aarch64 `.so`（原版与低延迟版）做过电机通信实测（根 README 01 号包）；尚未经 `seeed` 环境的 `policy_python.sh` 与 libusb 1.0.29 跑过完整部署入口，termios 键盘、IMU 串口名也未在 Jetson 上验证。
+- sim2real-K7：`dm_sdk_profile` 缺省：Windows 与 aarch64 为 `low_latency`，其他 Linux 为 `original`（2026-10-20 起）；`--control_rate_hz` 缺省 500。1 kHz 在 Jetson 上会使盒子停止转发 CAN（根 README 01 号包），Python 部署进程内不得有占满 CPU 的线程（GIL 使发令环降至约 24 Hz，01-K97）。补丁版反馈时龄见根 README 01-K27。
 - sim2real-K8：把训练仓库藏起来（`BENNETT_RL_ROOT` 指向不存在的目录）后，6 个入口的 `--check_only` 与单元测试照常通过，契约指纹与此前一致，说明运行不依赖 `bennett_rl`；未在另一台电脑上验证，那里还需要 Python 环境与依赖。
 
+- **sim2real-K9**：`--ros2` 从本机 `127.0.0.1:19761` 接收速度，策略进程按入口范围限幅；ROS 桥要求新鲜 `/joy`、按住使能键和新鲜 `/cmd_vel`，默认 0.25 s 超时归零；停止请求锁存并让策略退出。来源：`ros_command.py`、`ros2_teleop.py` 与无电机验证。失联归零针对 ROS/进程消息中断，不等于无线接收器能检测所有无线断连。
+
+- **sim2real-K10**：摇杆映射已改为独立三轴比例输入，右摇杆控制 `vx/vy`，左摇杆左右控制 `wz`；旧的 A/B 切换模式和右摇杆调速行为不再参与默认手柄链路。来源：`JoystickVelocity` 与 `ros2_teleop.py`；实际轴编号、方向及推量响应待逐项验证。
+
+- **sim2real-K11**：第一次右摇杆前推采集显示轴 3 从零增至约 +0.3 后回中；初设 `4/3/0` 将该动作错误映射成侧移，已将前后输入修正为轴 3。半推、满推及其他方向尚未验证。来源：2026-10-20 用户指定动作与 `JOY_AXES`、`CMD_VEL` 输出。
+
+- **sim2real-K12**：右摇杆前推复测通过：轴 3 随推量增至 +1，`vx` 逐渐增大并在满推时达到 +0.25 m/s，回中归零，`vy/wz` 始终为零；未按使能键，策略接收端保持禁用，未连接电机。来源：2026-10-20 修正轴参数后的实际 ROS 采集。
+
+- **sim2real-K13**：右摇杆后拉验证通过：轴 3 随拉量降至 -1，`vx` 满拉达到 -0.25 m/s，回中归零，`vy/wz` 始终为零；未按使能键，未连接电机。来源：2026-10-20 实际 ROS 采集。
+
+- **sim2real-K14**：右摇杆左推对应轴 2 正值，满推到 +1；松手后原始读数约 +0.403943。独立中位观察的 174 帧读数一致，偏差原因未确定。旧轴 4 未变化，首次侧移映射验证失败。来源：2026-10-20 指定动作与静置采集。
+
+- **sim2real-K15**：侧移轴已改为 2，并按实测中位补偿；正负方向分别以各自中位到端点的行程归一化，再施加死区和比例缩放，保证中位为零且保留两端满幅。来源：`JoystickVelocity.command`；实际左右侧移响应待复测。
+
+- **sim2real-K16**：右摇杆左推复测通过：轴 2 从实测中位增至 +1，`vy` 逐渐增大到 +0.12 m/s，松手后归零，`vx/wz` 始终为零；未按使能键，未连接电机。来源：2026-10-20 中位补偿后的实际 ROS 采集。
+
+- **sim2real-K17**：右摇杆右推验证通过：轴 2 从实测中位降至 -1，`vy` 满推达到 -0.12 m/s，松手后归零，`vx/wz` 始终为零；未按使能键，未连接电机。来源：2026-10-20 中位补偿后的实际 ROS 采集。
+
+- **sim2real-K18**：左摇杆左推验证通过：轴 0 增至 +1，`wz` 随推量增大到 +0.5 rad/s，松手后归零，`vx/vy` 始终为零；未按使能键，未连接电机。来源：2026-10-20 实际 ROS 采集。
+
+- **sim2real-K19**：首次指定左摇杆右推时，仅捕获到轴 2 的侧移输入，轴 0 未变化；该轮不能证明右转映射通过，需要明确摇杆物理位置后重采。来源：2026-10-20 实际 ROS 采集。
+
+- **sim2real-K20**：左摇杆右推重采通过：轴 0 降至 -1，`wz` 随推量降至 -0.5 rad/s，回中归零，`vx/vy` 始终为零；未按使能键，未连接电机。六个已分配方向均已取得实际输入验证。来源：2026-10-20 实际 ROS 采集及 K12、K13、K16—K18。
+
+- **sim2real-K21**：左摇杆前后实际改变轴 1，已采到 +1 与 -1 两端，三个速度分量始终为零；未分配的前后轴验证通过。来源：2026-10-20 实际 ROS 采集。
+
+- **sim2real-K22**：实际 L1/LB 对应 `buttons[4]`；按住时策略接收端放行速度，松开肩键而右摇杆仍满前推时，接收端变为禁用且三项速度归零，门控验证通过。来源：2026-10-20 真实手柄到 `RosCommandReceiver` 的采集，未连接电机。
+
+- **sim2real-K23**：实际 START 键对应 `buttons[9]`，已收到按下与松开；本轮只识别编号，启动和恢复策略的功能尚未接入。来源：2026-10-20 实际 `/joy` 采集。
+
+- **sim2real-K24**：实际 B 键对应 `buttons[1]`，按下与松开均已采到。来源：2026-10-20 实际 `/joy` 采集。
+
+- **sim2real-K25**：已实现 START 长按、中位与 L1 松开条件、B 锁存及 START 恢复；UDP 协议更新为 v2，策略要求接收器启动后的新 START 事件，等待位于 IMU 与 CAN 初始化之前。来源：`TeleopGate`、`RosCommandReceiver`、`DeploymentRunner`；纯输入及初始化顺序测试通过，实际按键流程待验证。
+
+- **sim2real-K26**：实际手柄在中位且 L1 松开时长按 START 后，接收端由锁定变为已解锁，收到新的启动请求，速度保持为零；START 解锁输入流程通过，未运行电机程序。来源：2026-10-20 v2 实际 ROS 链路采集。
+
+- **sim2real-K27**：同一 v2 接收进程完成 START 解锁后，实际按住 L1 并前推右摇杆可放行速度；回中、松开 L1 后归零，解锁状态保留。来源：2026-10-20 实际 ROS 链路采集，未运行电机程序。
+
+- **sim2real-K28**：实际按下 B 后接收端锁定；松开 B 再按住 L1 并前推右摇杆，原始速度话题有输入，但策略接收端始终为零，不自动恢复。来源：2026-10-20 同一 v2 接收进程的实际 ROS 采集，未运行电机程序。
+
+- **sim2real-K29**：B 锁定后，在中位且 L1 松开时重新长按 START，可恢复解锁；随后按住 L1 前推右摇杆可重新放行速度，回中、松开 L1 后归零。来源：2026-10-20 同一 v2 接收进程的实际 ROS 采集，未运行电机程序。
+
+- **sim2real-K30**：Windows Python 与 Jetson 策略 Python 的 START/B 输入及初始化替身测试均通过，包括拒绝短按、非中位、按住 L1、B 同时按下和旧 START 事件，以及未启动时不初始化 IMU/CAN；真实手柄已完成 K26—K29 的流程验证，整机运动效果尚未验证。来源：2026-10-20 两平台有限测试与实际 ROS 采集。
+
+- **sim2real-K31**：A 节命令已按现有 Jetson 总目录统一为 `../policy_python.sh`，优先展示 S1 手柄运行，保留 T9、键盘和新策略用法；静默测试模板已移出运行说明。来源：Jetson `policy_python.sh` 与用户指定的文档调整。
+
+- **sim2real-K32**：手柄运行按终端和策略逐项列出完整命令，不再使用“改用以下命令”的表述。来源：用户指定的文档格式调整。
+
+- **sim2real-K33**：手柄策略命令按用户截图合并为一个代码块，每行一个完整入口，涵盖 S1、T9、go2-10、trot1、free_gait3 和 free_gait4。来源：用户指定的布局与现有部署入口。
+
+- **sim2real-K34**：2026-10-20 部署核查（静态与 `--check_only`，未开 IMU 与电机）：`bennett_deploy/*.py` 编译通过；`bennett_1_crawl_deploy.py --check_only` 通过（500 Hz、`low_latency`、kp 28、kd 2）；用 Isaac 生成 `bennett_3` 的 `env.yaml` 后 `bennett_1_free_deploy.py --check_only` 通过，说明部署契约可读 `bennett_3` 训练结果，执行器模型改动（延迟、摩擦）只在训练端，部署代码无需改。`bennett_3` 尚未训练，现无对应策略。
+
+- **sim2real-K35**：2026-10-20 部署端新增：①电机看门狗，`--motor_watchdog_ms`（缺省 300，0 关闭）与 `--motor_watchdog_unit_us`（缺省 50），启动时写 `TIMEOUT` 并读回，退出时失能后写回，细节与局限见根 README 01-K98；②`main()` 设 `sys.setswitchinterval(0.0005)`；③退出的 `[TIMING]` 行增加 `cpu_ratio` 与线程名。线程审计：只有 IMU 读取与 CSV 写入两个线程，均带阻塞或 `sleep`，ROS2、键盘在主线程轮询。单元测试 16 项通过、1 项跳过。看门狗的使能状态写入、读回、退出写回已在 Jetson 零力矩验证（根 README 01-K98）；退出路径改为先 `shutdown_motors()`、最后 `bus.close()`，因 Jetson 上关闭 USB 设备时 libusb 会 abort；完整入口未在 Jetson 运行。
+
+- **sim2real-K36**：脱机运行（拔掉 USB 数据线后 SSH 不可用）：`tools/start_detached.sh <入口.py> <策略> [参数]`，环境变量 `DURATION_S`（缺省 60，从控制循环起算，到时自动退出并失能）、`TAG`；输出目录 `<总目录>/ground_logs/<时间>_<TAG>/` 含 `deploy.csv`（策略步日志）、`policy.log`、`teleop.log`、`meta.txt`。策略程序在非终端环境下自动关闭键盘（`input.py`），启动与操作靠手柄 START；脱机时终端 `q` 不可用，退出靠 `DURATION_S` 与电机看门狗。`bennett_3` 的导出策略 `exported/policy.pt` 用 `bennett_1_free_deploy.py` 的 `--check_only` 通过，`bennett_1_crawl_deploy.py` 因观测项不同被拒绝，属预期。脚本只做过语法检查，未在 Jetson 上运行。
+
+- **sim2real-K37**：2026-10-20 新增入口 `bennett_3_free_deploy.py`（自由步态，33 维），缺省策略为 `policies/bennett_3_free_V5`（bennett_3 第 1200 轮，策略哈希前 16 位 54e0b058846fe3d0）。不依赖训练仓库的 `--check_only`（`BENNETT_RL_ROOT` 指向不存在的目录）通过，角速度、重力、关节速度的低通频率与训练一致（12 Hz）。键盘范围取训练范围（前后 ±0.35、侧移 ±0.20、转向 ±0.6）；手柄满幅仍按 K10 的 ±0.25、±0.12、±0.5，小于训练范围。MuJoCo 复现与同 S1 的对比见 `bennett_rl/README.md` K60；未上真机。
+
 ## 已完成
+
+- [x] 2026-10-20 新增 bennett_3 入口并通过 `--check_only`，`bennett_rl` 侧完成评估与 MuJoCo 复现（sim2real-K37）。
+- [x] 2026-10-20 部署端加入电机看门狗、切换间隔与 CPU 占用诊断，审计线程（sim2real-K35）。
+- [x] 2026-10-20 核对 `README.md` 中关于 Linux 低延迟库与缺省采样率的过期表述，补充 aarch64 低延迟库与 500 Hz 缺省（sim2real-K6、K7、K34）。
+- [x] 2026-10-20 合并手柄策略命令代码块，补齐 GO2、trot 与两个旧自由步态入口；仅修改文档（sim2real-K33）。
+
+- [x] 2026-10-20 将 S1、T9 的手柄命令统一为直接标注终端、策略和完整命令的格式（sim2real-K32）。
+
+- [x] 2026-10-20 将 A 节整理为 Jetson 的目录、手柄、键盘、新策略与拉取命令；补充稀疏检出造成的两端目录差异，未运行硬件命令（sim2real-K31）。
+
+- [x] **sim2real-T7** 2026-10-20 完成实际 START 解锁、L1 放行、B 锁存、松开 B 不自动恢复及 START 恢复验证；采集已退出，未运行电机程序（sim2real-K26—sim2real-K30）。
+
+- [x] 2026-10-20 实际 B 锁存及松开后不自动恢复验证通过，进入 START 恢复验证（sim2real-K28）。
+
+- [x] 2026-10-20 验证 START 解锁后 L1 能放行速度，进入 B 锁存验证（sim2real-K27）。
+
+- [x] 2026-10-20 实际 START 长按解锁验证通过，保持同一接收进程继续验证 L1、B 与恢复流程（sim2real-K26）。
+
+- [x] 2026-10-20 确认 B 编号并实现三按键流程，验证短按拒绝、非中位拒绝、L1/B 条件、锁存恢复、消息超时、旧事件拒绝与未启动时不初始化 IMU/CAN（sim2real-K24、sim2real-K25）。
+
+- [x] 2026-10-20 确认 START 编号，进入 B 键编号识别；未启动策略或连接电机（sim2real-K23）。
+
+- [x] 2026-10-20 确认实际 L1/LB 编号，并验证摇杆保持前推时松开 L1 会在策略接收端归零；进入 START 编号识别（sim2real-K22）。
+
+- [x] **sim2real-T6** 2026-10-20 完成摇杆六方向及未分配轴的实际输入验证，方向、幅度、满幅和回中均已确认；未连接电机（sim2real-K12、sim2real-K13、sim2real-K16—sim2real-K18、sim2real-K20、sim2real-K21）。
+
+- [x] 2026-10-20 左摇杆右转重采通过，六个已分配方向均已确认；开始验证左摇杆前后轴保持无功能（sim2real-K20）。
+
+- [x] 2026-10-20 首次右转采集未覆盖目标轴，保留代码并明确左下方摇杆位置后重采（sim2real-K19）。
+
+- [x] 2026-10-20 左摇杆左转验证通过，进入右转独立采集（sim2real-K18）。
+
+- [x] 2026-10-20 右摇杆右推验证通过，右摇杆四个方向均已确认；进入左摇杆转向验证（sim2real-K12、sim2real-K13、sim2real-K16、sim2real-K17）。
+
+- [x] 2026-10-20 中位补偿后的右摇杆左推复测通过，进入向右推的独立验证（sim2real-K16）。
+
+- [x] 2026-10-20 首次左推发现侧移轴配置错误和原始中位偏差；完成静置采集、轴号修正及中位补偿，进入复测（sim2real-K14、sim2real-K15）。
+
+- [x] 2026-10-20 右摇杆后拉的方向、幅度响应、满幅及回中验证通过，进入向左推的独立验证（sim2real-K13）。
+
+- [x] 2026-10-20 右摇杆前推复测通过，进入向后拉的独立验证（sim2real-K12）。
+
+- [x] 2026-10-20 首次前推采集发现前后轴配置错误，修正后进入同方向复测；该次未覆盖满幅输入（sim2real-K11）。
+
+- [x] 2026-10-20 按用户布局实现摇杆幅度到速度的线性映射，保留原有按住使能和超时归零；开始逐方向无电机验证（sim2real-K10）。
+
+- [x] 2026-10-20 增加 `--ros2` 输入、ROS 速度桥和启动脚本；Windows 的门控/限幅验证及 Jetson 的真实 ROS 2 话题到 Python 3.13 运行库验证通过，未打开电机（sim2real-K9）。
+  - 首次 Windows 连续发包发现粗粒度单调时钟可能使立即到来的停止包被判为重复；已改用跨进程一致的高精度 `perf_counter`，停止包与实际 ROS 链路验证通过。
 
 - [X]  2026-10-16 建 `sim2real/`，复制部署运行库、入口、动态库、工具与文档，改动动态库路径并验证（sim2real-K1）。
 - [X]  2026-10-17 写死的 `E:\` 路径改为跨平台解析；加 Linux 键盘与 `.so` 绑定；放宽契约校验（见 D）。
@@ -1233,8 +1437,11 @@ sim2real/
 
 ## 待完成
 
+
 - [ ]  sim2real-T1：用户在真机上试 `bennett_1_crawl_deploy.py`（T9）与 `bennett_1_free_deploy.py`（S1），结果记入本节；首次上电按用户的流程，须当次明确同意。
+- [ ]  sim2real-T9：用户在真机上试 `bennett_3_free_deploy.py`（bennett_3），结果记入本节；训练是否续到 1500 轮、动作是否自然待看（`bennett_rl/README.md` K60、T37）。
 - [ ]  sim2real-T2：在 Linux（Jetson）上跑 `--check_only`、`--dry_run`，确认 `.so` 绑定、键盘、IMU 串口名（sim2real-K6）。
+- [ ]  sim2real-T8：在 `seeed` 环境跑完整入口 `--dry_run` 与零增益试验，核对退出时 `[TIMING] cpu_ratio` 和 libusb 1.0.29 下关闭设备是否仍 abort（sim2real-K35）。
 - [ ]  sim2real-T3：官方动态库下 T9 对约 109 ms 滞后不稳，真机若出现迟钝或摔倒，改用补丁版或 D4（sim2real-K5）。
 - [ ]  sim2real-T4：用户确认文件夹结构后，决定原位置文件是否删除。
 - [ ]  sim2real-T5：在另一台电脑上拷入整个 `sim2real/`，运行 `--check_only`，确认 Python 依赖与动态库齐全（sim2real-K8）。

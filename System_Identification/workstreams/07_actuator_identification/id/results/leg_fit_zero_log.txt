@@ -17,3 +17,39 @@
   gen  130 best 335.7 sigma 0.991 1791s
   gen  140 best 335.7 sigma 1.057 1921s
   gen  150 best 335.7 sigma 1.016 2049s
+  gen  160 best 335.7 sigma 1.203 2164s
+  gen  170 best 335.7 sigma 1.116 2279s
+  gen  180 best 335.7 sigma 0.829 2393s
+  gen  190 best 335.7 sigma 0.664 2512s
+  gen  200 best 335.7 sigma 0.660 2628s
+  gen  210 best 335.7 sigma 0.551 2744s
+  gen  219 best 335.7 sigma 0.562 2850s
+{"fit_cost": 335.66986083984375, "fit_cost_baseline": 656.155517578125, "exam_cost": 153.30029296875, "exam_cost_baseline": 309.2940368652344}
+  delay_ms          5.0532   (基线 0.0000)
+  kp_s              0.9260   (基线 1.0000)
+  kd_s              1.5000   (基线 1.0000)
+  tau_off          -0.0800   (基线 0.0000)
+  fric_FL_thigh     0.0449   (基线 0.0500)
+  fric_FL_calf      0.0000   (基线 0.0500)
+  fric_FR_thigh     0.1532   (基线 0.0500)
+  fric_FR_calf      0.0000   (基线 0.0500)
+  fric_RL_thigh     0.0445   (基线 0.0500)
+  fric_RL_calf      0.0000   (基线 0.0500)
+  fric_RR_thigh     0.1890   (基线 0.0500)
+  fric_RR_calf      0.0000   (基线 0.0500)
+  visc_FL_thigh     0.3000   (基线 0.0010)
+  visc_FL_calf      0.3000   (基线 0.0010)
+  visc_FR_thigh     0.0000   (基线 0.0010)
+  visc_FR_calf      0.0000   (基线 0.0010)
+  visc_RL_thigh     0.3000   (基线 0.0010)
+  visc_RL_calf      0.3000   (基线 0.0010)
+  visc_RR_thigh     0.0066   (基线 0.0010)
+  visc_RR_calf      0.0000   (基线 0.0010)
+  arm_FL_thigh      0.0372   (基线 0.0000)
+  arm_FL_calf       0.0000   (基线 0.0000)
+  arm_FR_thigh      0.0267   (基线 0.0000)
+  arm_FR_calf       0.0000   (基线 0.0000)
+  arm_RL_thigh      0.0303   (基线 0.0000)
+  arm_RL_calf       0.0000   (基线 0.0000)
+  arm_RR_thigh      0.0366   (基线 0.0000)
+  arm_RR_calf       0.0000   (基线 0.0000)

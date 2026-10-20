@@ -28,6 +28,7 @@ bash sim2real/start_ros2_teleop.sh
 
 ```bash
 ../policy_python.sh sim2real/bennett_1_free_deploy.py --ros2
+../policy_python.sh sim2real/bennett_3_free_deploy.py --ros2
 ../policy_python.sh sim2real/bennett_1_crawl_deploy.py --ros2
 ../policy_python.sh sim2real/quad_leg_go2-10_deploy.py --ros2
 ../policy_python.sh sim2real/quad_leg_trot1_deploy.py --ros2
@@ -64,6 +65,12 @@ B 和松开 L1 都只控制速度输入，策略仍可调整腿部；默认姿�
 
 ```bash
 ../policy_python.sh sim2real/bennett_1_free_deploy.py --keyboard
+```
+
+运行自由步态 bennett_3（按辨识执行器模型训练，K37）：
+
+```bash
+../policy_python.sh sim2real/bennett_3_free_deploy.py --keyboard
 ```
 
 运行爬行 T9：
@@ -112,6 +119,7 @@ Jetson 当前只展开 `sim2real/` 和仓库根文件；Windows 中其他目录�
 | --- | --- |
 | `bennett_1_crawl_deploy.py` | bennett_1 爬行变体，缺省 T9，与 sim2sim 配置 `bennett_1_crawl` 一致 |
 | `bennett_1_free_deploy.py` | bennett_1 自由步态，缺省 S1，与 sim2sim 配置 `bennett_1_free` 一致 |
+| `bennett_3_free_deploy.py` | bennett_3 自由步态，缺省 `policies/bennett_3_free_V5`，与 sim2sim 配置 `bennett_3_free` 一致 |
 | `quad_leg_free_gait3_deploy.py`、`quad_leg_free_gait4_deploy.py` | 旧的自由步态策略，取 `quad_leg_free_gait` 下最新导出 |
 | `quad_leg_go2-10_deploy.py`、`quad_leg_trot1_deploy.py` | go2-10、trot1 |
 
@@ -132,6 +140,7 @@ Jetson 当前只展开 `sim2real/` 和仓库根文件；Windows 中其他目录�
 - 键盘：`w`/`s` 前后，`a`/`d` 侧移，`j`/`l` 转向，`0`/`x` 清零，空格或回车授权策略，`q` 或 Esc 退出；指令范围缺省取各策略的训练范围。
 - 策略已打包在 `sim2real/policies/`，缺省不需要 `bennett_rl`，整个 `sim2real/` 拷到另一台电脑即可运行；另需 Python（含 torch）、pyserial、pyusb、dmcan-sdk，Linux 另需 libusb（见 `docs/WORKFLOW.md`）。
 - 换 bennett_1 的策略：环境变量 `BENNETT1_CRAWL_RUN=T9|D4`、`BENNETT1_FREE_RUN=S1`（打包的别名），或 `bennett_rl/logs/rsl_rl/` 下的完整运行目录名，或 `--policy`。
+- 换 bennett_3 的策略：环境变量 `BENNETT3_FREE_RUN=<运行目录名>`（`bennett_rl/logs/rsl_rl/bennett/bennett_3/flat/` 下），或 `--policy`；缺省使用打包的 `policies/bennett_3_free_V5`。
 - 打包的策略找不到时才去 `bennett_rl` 找：环境变量 `BENNETT_RL_ROOT`，否则取同级目录 `bennett_rl`，再否则取本仓库所在盘符下的 `Project/Isaaclab/bennett_rl`。
 - Windows 在已配置依赖的 Python 环境中运行同一入口，将本节命令的 `../policy_python.sh` 换成 `python`；该 `.sh` 是 Jetson 总目录的启动包装，不是另一套策略。
 
@@ -179,6 +188,7 @@ sim2real/
 │   └── start_detached.sh          Jetson 脱机启动：手柄桥与策略放后台，日志写本机，可拔 USB 数据线（sim2real-K36）
 ├── bennett_1_crawl_deploy.py      bennett_1 爬行变体入口（缺省 T9）
 ├── bennett_1_free_deploy.py       bennett_1 自由步态入口（缺省 S1）
+├── bennett_3_free_deploy.py       bennett_3 自由步态入口（缺省 `policies/bennett_3_free_V5`）
 ├── quad_leg_free_gait3_deploy.py  自由步态 gait3 入口
 ├── quad_leg_free_gait4_deploy.py  自由步态 gait4 入口
 ├── quad_leg_go2-10_deploy.py      go2-10 入口（缺省策略）
@@ -199,6 +209,7 @@ sim2real/
 | `dev_sn.py` | `tools/` | 无改动 |
 | `WORKFLOW.md` | `docs/` | 无改动 |
 | 新写 | `bennett_1_crawl_deploy.py`、`bennett_1_free_deploy.py` | bennett_1 的 T9、S1 入口 |
+| 新写 | `bennett_3_free_deploy.py` | bennett_3 的入口，缺省策略为 `policies/bennett_3_free_V5` |
 | `bennett_rl/logs/rsl_rl/` 下的 6 个运行目录 | `policies/` | 只取 `exported/policy.pt`、`params/env.yaml`、`params/agent.yaml`，来源见 E |
 
 ### D. 相对原件的改动
@@ -220,6 +231,7 @@ sim2real/
 | `bennett_1_crawl_T9` | `bennett_1/crawl/2026-10-16_13-10-20_t9_same` | `bennett_1_crawl_deploy.py` 缺省 |
 | `bennett_1_crawl_D4` | `bennett_1/crawl/2026-10-16_15-13-42_d4_delay5` | `BENNETT1_CRAWL_RUN=D4` |
 | `bennett_1_free_S1` | `bennett_1/flat/2026-10-16_05-53-35` | `bennett_1_free_deploy.py` 缺省 |
+| `bennett_3_free_V5` | `bennett/bennett_3/flat/2026-10-20_16-38-16`（`model_1200`） | `bennett_3_free_deploy.py` 缺省 |
 | `free_gait3` | `quad_leg_free_gait/quad_leg_free_gait3/flat/2026-09-05_07-07-11` | `quad_leg_free_gait3_deploy.py`、`quad_leg_free_gait4_deploy.py` |
 | `go2-10` | `quad_leg_go2/quad_leg_go2-10/flat/2026-07-19_18-41-26` | `quad_leg_go2-10_deploy.py` |
 | `trot1` | `quad_leg_trot/quad_leg_trot1/flat/2026-07-27_20-08-08` | `quad_leg_trot1_deploy.py` |
@@ -301,8 +313,11 @@ sim2real/
 
 - **sim2real-K36**：脱机运行（拔掉 USB 数据线后 SSH 不可用）：`tools/start_detached.sh <入口.py> <策略> [参数]`，环境变量 `DURATION_S`（缺省 60，从控制循环起算，到时自动退出并失能）、`TAG`；输出目录 `<总目录>/ground_logs/<时间>_<TAG>/` 含 `deploy.csv`（策略步日志）、`policy.log`、`teleop.log`、`meta.txt`。策略程序在非终端环境下自动关闭键盘（`input.py`），启动与操作靠手柄 START；脱机时终端 `q` 不可用，退出靠 `DURATION_S` 与电机看门狗。`bennett_3` 的导出策略 `exported/policy.pt` 用 `bennett_1_free_deploy.py` 的 `--check_only` 通过，`bennett_1_crawl_deploy.py` 因观测项不同被拒绝，属预期。脚本只做过语法检查，未在 Jetson 上运行。
 
+- **sim2real-K37**：2026-10-20 新增入口 `bennett_3_free_deploy.py`（自由步态，33 维），缺省策略为 `policies/bennett_3_free_V5`（bennett_3 第 1200 轮，策略哈希前 16 位 54e0b058846fe3d0）。不依赖训练仓库的 `--check_only`（`BENNETT_RL_ROOT` 指向不存在的目录）通过，角速度、重力、关节速度的低通频率与训练一致（12 Hz）。键盘范围取训练范围（前后 ±0.35、侧移 ±0.20、转向 ±0.6）；手柄满幅仍按 K10 的 ±0.25、±0.12、±0.5，小于训练范围。MuJoCo 复现与同 S1 的对比见 `bennett_rl/README.md` K60；未上真机。
+
 ## 已完成
 
+- [x] 2026-10-20 新增 bennett_3 入口并通过 `--check_only`，`bennett_rl` 侧完成评估与 MuJoCo 复现（sim2real-K37）。
 - [x] 2026-10-20 部署端加入电机看门狗、切换间隔与 CPU 占用诊断，审计线程（sim2real-K35）。
 - [x] 2026-10-20 核对 `README.md` 中关于 Linux 低延迟库与缺省采样率的过期表述，补充 aarch64 低延迟库与 500 Hz 缺省（sim2real-K6、K7、K34）。
 - [x] 2026-10-20 合并手柄策略命令代码块，补齐 GO2、trot 与两个旧自由步态入口；仅修改文档（sim2real-K33）。
@@ -359,6 +374,7 @@ sim2real/
 
 
 - [ ]  sim2real-T1：用户在真机上试 `bennett_1_crawl_deploy.py`（T9）与 `bennett_1_free_deploy.py`（S1），结果记入本节；首次上电按用户的流程，须当次明确同意。
+- [ ]  sim2real-T9：用户在真机上试 `bennett_3_free_deploy.py`（bennett_3），结果记入本节；训练是否续到 1500 轮、动作是否自然待看（`bennett_rl/README.md` K60、T37）。
 - [ ]  sim2real-T2：在 Linux（Jetson）上跑 `--check_only`、`--dry_run`，确认 `.so` 绑定、键盘、IMU 串口名（sim2real-K6）。
 - [ ]  sim2real-T8：在 `seeed` 环境跑完整入口 `--dry_run` 与零增益试验，核对退出时 `[TIMING] cpu_ratio` 和 libusb 1.0.29 下关闭设备是否仍 abort（sim2real-K35）。
 - [ ]  sim2real-T3：官方动态库下 T9 对约 109 ms 滞后不稳，真机若出现迟钝或摔倒，改用补丁版或 D4（sim2real-K5）。
