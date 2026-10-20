@@ -78,7 +78,7 @@ B 和松开 L1 都只控制速度输入，策略仍可调整腿部；默认姿�
 ../policy_python.sh sim2real/quad_leg_free_gait3_deploy.py --keyboard
 ```
 
-需要显式选择 `low_latency` 动态库时，使用以下 T9 命令：
+缺省已按平台选低延迟库（Windows、Jetson 为 `low_latency`）；需要显式指定时使用以下 T9 命令：
 
 ```bash
 ../policy_python.sh sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latency
@@ -152,7 +152,7 @@ sim2real/
 │   ├── paths.py                   路径解析：打包的策略优先，其次训练仓库
 │   ├── policy.py                  50 维观测拼装与策略推理
 │   ├── ros_command.py             ROS 本机速度接收、限幅、超时与手柄使能门控
-│   ├── runtime.py                 主程序：参数、安全启动、1 kHz 控制环、50 Hz 策略
+│   ├── runtime.py                 主程序：参数、安全启动、500 Hz 控制环（缺省）、50 Hz 策略
 │   ├── tests.py                   部署核心单元测试
 │   ├── trot1_contract.py          trot1 契约
 │   ├── trot1_gait.py              trot1 步态时钟
@@ -169,7 +169,8 @@ sim2real/
 ├── sdk/                           达妙动态库
 │   ├── dlls/                      官方版（反馈每约 110–120 ms 一批）与 Linux x86-64 `.so`
 │   ├── dlls_linux_aarch64/        Linux aarch64（Jetson）版 `libdm_device.so`，1.x 接口，需要 libusb 1.0.27 以上
-│   ├── dlls_lowlatency/           补丁版（批量延迟改为 1 ms，反馈时龄均值约 7 ms，无 Linux 版）
+│   ├── dlls_linux_aarch64_lowlatency/  Jetson 补丁版（睡眠常量 100 ms 改为 0.5 ms，反馈时龄约 0.4 ms）
+│   ├── dlls_lowlatency/           Windows 补丁版（批量延迟改为 1 ms，反馈时龄均值约 7 ms）
 │   └── libusb-1.0.dll
 ├── tools/
 │   ├── 0_Return_to_zero.py        8 电机限速安全回零
@@ -202,7 +203,7 @@ sim2real/
 
 | 文件 | 改动 |
 | --- | --- |
-| `runtime.py` | 动态库目录改为 `sdk/`；缺省策略改为打包的 `policies/go2-10`，没有再取 `bennett_rl`；IMU 缺省串口按平台取值；Linux 上选 `low_latency` 报错；打印训练与运行时的观测低通对比；退出时恢复终端 |
+| `runtime.py` | 动态库目录改为 `sdk/`；缺省策略改为打包的 `policies/go2-10`，没有再取 `bennett_rl`；IMU 缺省串口按平台取值；`--control_rate_hz` 缺省 500；打印训练与运行时的观测低通对比；退出时恢复终端 |
 | `dm_can.py` | 动态库目录改为 `sdk/`；Linux 上把 dmcan 的后端库绑定到 `sdk/dlls/libdm_device.so`，不再依赖启动目录 |
 | `contract.py`、`free_gait_contract.py` | 关节位置、速度观测同时接受官方函数与 bennett_1 的 `filtered_observation` 包装（内层函数仍须相同） |
 | `input.py` | 新增 Linux 键盘读取（termios，按键与 Windows 一致）；`parse_posix_keys` 可单测 |
@@ -238,8 +239,8 @@ sim2real/
 - sim2real-K3：关节符号表 `sim_to_motor` 沿用原文件（FR_calf、RR_calf 为 −1，其余 +1），不改动。`free_gait_contract.py` 的注释记载：FL、RL 的 thigh 取 +1 在实机验证过（2026-09-05），`3_quad_leg_track.py` 的 −1 会使步态镜像、不适用于腿部策略；入口已由用户验证。
 - sim2real-K4：训练配置差异：go2-10 的执行器为力矩限 7 N·m、饱和 12 N·m、速度限 30 rad/s，bennett_1 为 8、20、20。
 - sim2real-K5：缺省策略的已知性质（来自 `bennett_rl/README.md`）：T9 训练时没有加反馈滞后，滞后 80 ms 开始变差、100 ms 失效；官方动态库的反馈约 109 ms 一批，所以用 T9 时建议用补丁版（Windows，`--dm_sdk_profile low_latency`），或换 D4（K54）。S1 前进时四脚抬高 27–41 mm，两脚同时着地约占 20%（K53）。
-- sim2real-K6：Linux 部分只做了静态检查与键盘解析单测，未在 Linux 上运行：`.so` 绑定、termios 键盘、串口名、`low_latency` 无 Linux 版。
-- sim2real-K7：`dm_sdk_profile` 缺省：Windows 为 `low_latency`，Linux 为 `original`（2026-10-19 起；此前缺省 `original`）；补丁版的反馈时龄见根 README 01-K27。
+- sim2real-K6：Jetson 上已用 `claude-lab` 账户对 aarch64 `.so`（原版与低延迟版）做过电机通信实测（根 README 01 号包）；尚未经 `seeed` 环境的 `policy_python.sh` 与 libusb 1.0.29 跑过完整部署入口，termios 键盘、IMU 串口名也未在 Jetson 上验证。
+- sim2real-K7：`dm_sdk_profile` 缺省：Windows 与 aarch64 为 `low_latency`，其他 Linux 为 `original`（2026-10-20 起）；`--control_rate_hz` 缺省 500。1 kHz 在 Jetson 上会使盒子停止转发 CAN（根 README 01 号包），Python 部署进程内不得有占满 CPU 的线程（GIL 使发令环降至约 24 Hz，01-K97）。补丁版反馈时龄见根 README 01-K27。
 - sim2real-K8：把训练仓库藏起来（`BENNETT_RL_ROOT` 指向不存在的目录）后，6 个入口的 `--check_only` 与单元测试照常通过，契约指纹与此前一致，说明运行不依赖 `bennett_rl`；未在另一台电脑上验证，那里还需要 Python 环境与依赖。
 
 - **sim2real-K9**：`--ros2` 从本机 `127.0.0.1:19761` 接收速度，策略进程按入口范围限幅；ROS 桥要求新鲜 `/joy`、按住使能键和新鲜 `/cmd_vel`，默认 0.25 s 超时归零；停止请求锁存并让策略退出。来源：`ros_command.py`、`ros2_teleop.py` 与无电机验证。失联归零针对 ROS/进程消息中断，不等于无线接收器能检测所有无线断连。
@@ -292,8 +293,11 @@ sim2real/
 
 - **sim2real-K33**：手柄策略命令按用户截图合并为一个代码块，每行一个完整入口，涵盖 S1、T9、go2-10、trot1、free_gait3 和 free_gait4。来源：用户指定的布局与现有部署入口。
 
+- **sim2real-K34**：2026-10-20 部署核查（静态与 `--check_only`，未开 IMU 与电机）：`bennett_deploy/*.py` 编译通过；`bennett_1_crawl_deploy.py --check_only` 通过（500 Hz、`low_latency`、kp 28、kd 2）；用 Isaac 生成 `bennett_3` 的 `env.yaml` 后 `bennett_1_free_deploy.py --check_only` 通过，说明部署契约可读 `bennett_3` 训练结果，执行器模型改动（延迟、摩擦）只在训练端，部署代码无需改。尚未实现：部署端写电机看门狗 TIMEOUT、线程 CPU 占用审计（根 README 01-T25）。`bennett_3` 尚未训练，现无对应策略。
+
 ## 已完成
 
+- [x] 2026-10-20 核对 `README.md` 中关于 Linux 低延迟库与缺省采样率的过期表述，补充 aarch64 低延迟库与 500 Hz 缺省（sim2real-K6、K7、K34）。
 - [x] 2026-10-20 合并手柄策略命令代码块，补齐 GO2、trot 与两个旧自由步态入口；仅修改文档（sim2real-K33）。
 
 - [x] 2026-10-20 将 S1、T9 的手柄命令统一为直接标注终端、策略和完整命令的格式（sim2real-K32）。
@@ -349,6 +353,7 @@ sim2real/
 
 - [ ]  sim2real-T1：用户在真机上试 `bennett_1_crawl_deploy.py`（T9）与 `bennett_1_free_deploy.py`（S1），结果记入本节；首次上电按用户的流程，须当次明确同意。
 - [ ]  sim2real-T2：在 Linux（Jetson）上跑 `--check_only`、`--dry_run`，确认 `.so` 绑定、键盘、IMU 串口名（sim2real-K6）。
+- [ ]  sim2real-T8：部署端启动时写电机看门狗 TIMEOUT（约 300 ms）并在退出时恢复；审计 ROS2、IMU、日志线程有无占满 CPU 的循环（根 README 01-T25、07 号包）。需用户同意后改部署代码。
 - [ ]  sim2real-T3：官方动态库下 T9 对约 109 ms 滞后不稳，真机若出现迟钝或摔倒，改用补丁版或 D4（sim2real-K5）。
 - [ ]  sim2real-T4：用户确认文件夹结构后，决定原位置文件是否删除。
 - [ ]  sim2real-T5：在另一台电脑上拷入整个 `sim2real/`，运行 `--check_only`，确认 Python 依赖与动态库齐全（sim2real-K8）。

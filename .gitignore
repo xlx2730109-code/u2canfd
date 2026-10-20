@@ -26,3 +26,4 @@ System_Identification/workstreams/07_actuator_identification/latency/data/raw/**
 System_Identification/workstreams/08_sensor_identification/data/raw/**/raw.csv
 System_Identification/workstreams/07_actuator_identification/id/data/raw/**/feedback.csv
 System_Identification/workstreams/07_actuator_identification/id/data/raw/**/commands.csv
+System_Identification/workstreams/07_actuator_identification/id/results/replay/*.npz
