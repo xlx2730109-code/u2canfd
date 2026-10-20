@@ -1,0 +1,72 @@
+{
+ "run_id": "20261020_123409_id_FR_calf_multisine_r500",
+ "motor": 4,
+ "name": "FR_calf",
+ "protocol": "multisine",
+ "rate_hz": 500.0,
+ "kp": 28.0,
+ "kd": 2.0,
+ "q0": -0.10852979324025291,
+ "bias_nm": -0.03877248677248663,
+ "abort": null,
+ "n_pre_replies": 265,
+ "n_cmds": 14250,
+ "n_replies_total": 14520,
+ "aligned": true,
+ "dll": "low_latency",
+ "timeout_ms": 300.0,
+ "timeout_raw": 6000,
+ "args": {
+  "protocol": "multisine",
+  "motor": 4,
+  "rate_hz": 500.0,
+  "kp": 28.0,
+  "kd": 2.0,
+  "amp": 0.06,
+  "duration_s": 25.0,
+  "f0": 0.2,
+  "f1": 8.0,
+  "speeds": [
+   0.05,
+   0.1,
+   0.2
+  ],
+  "amps": [
+   0.2,
+   0.4,
+   0.6
+  ],
+  "widths_ms": [
+   20.0,
+   60.0,
+   150.0
+  ],
+  "repeats": 2,
+  "seed": 1,
+  "timeout_ms": 300.0,
+  "timeout_unit_us": 50.0,
+  "execute": true
+ },
+ "info": {
+  "bias_nm": -0.03877248677248663,
+  "freqs": [
+   0.4,
+   0.9,
+   1.7,
+   3.1,
+   5.3,
+   7.7
+  ],
+  "phases": [
+   3.6514865401887646,
+   1.22367858484726,
+   6.064851573625203,
+   5.805514951196297,
+   2.93511887926252,
+   4.168709005456247
+  ],
+  "amp": 0.06,
+  "duration_s": 25.0
+ },
+ "note": "反馈第 n_pre+j 个对应命令第 j 个（状态码 1 的应答数等于命令数时 aligned 为真）"
+}

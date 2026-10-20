@@ -97,6 +97,9 @@ def main() -> int:
                     help="长稳用：不保存逐帧数据，只记汇总（每电机收帧数、时龄分布、发送耗时、周期、进程内存与 CPU），避免自身内存增长")
     ap.add_argument("--bare_cb", action="store_true",
                     help="仅与 --lite 合用：回调只数帧，不调用 SDK 自带的反馈解码（canframeCallback）。用于区分回调成本对发送抖动的贡献，不能用于部署")
+    ap.add_argument("--busy_thread", action="store_true",
+                    help="发送期间另开一个纯 Python 死循环线程（x += 1），检验 CPU 密集线程通过 GIL 对发令环的影响（DeepSeek 称 1 kHz 会掉到 23 Hz）")
+    ap.add_argument("--n_motors", type=int, default=8, help="发送阶段只给前 N 个电机发帧（预检仍查全部 8 个）")
     ap.add_argument("--no_gc", action="store_true", help="发送前 gc.collect() 后 gc.disable()，检验发送尖峰是不是垃圾回收造成的")
     ap.add_argument("--timer_1ms", action="store_true",
                     help="Windows：像部署程序一样调用 timeBeginPeriod(1)，把系统定时器精度从 15.6 ms 提到 1 ms")
@@ -139,7 +142,7 @@ def main() -> int:
         ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x80)
     lib = lib_info()
     stamp = datetime.now()
-    tag = ("_t1ms" if timer_set else "") + ("_pol" if pol is not None else "") + ("_dclk" if args.deploy_clock else "")         + (f"_sw{args.switch_interval * 1000:g}" if args.switch_interval is not None else "") + ("_nogc" if args.no_gc else "") + ("_q" if args.queue_send else "") + ("_hi" if args.priority == "high" else "") + ("_lite" if args.lite else "") + ("_bare" if args.bare_cb else "") + (f"_tail{args.tail_s:g}" if args.tail_s != 0.3 else "")
+    tag = ("_t1ms" if timer_set else "") + ("_pol" if pol is not None else "") + ("_dclk" if args.deploy_clock else "")         + (f"_sw{args.switch_interval * 1000:g}" if args.switch_interval is not None else "") + ("_nogc" if args.no_gc else "") + ("_q" if args.queue_send else "") + ("_hi" if args.priority == "high" else "") + ("_lite" if args.lite else "") + ("_bare" if args.bare_cb else "") + ("_busy" if args.busy_thread else "") + (f"_n{args.n_motors}" if args.n_motors != 8 else "") + (f"_tail{args.tail_s:g}" if args.tail_s != 0.3 else "")
     run_id = f"{stamp.strftime('%Y%m%d_%H%M%S')}_powered_zt{int(args.rate_hz)}hz_{lib['profile']}{tag}_r{args.repeat:02d}"
     # 带策略的运行属于 C_loop_timing（控制程序节拍），其余属于 B_motor_comm
     topic = "C_loop_timing" if pol is not None else "B_motor_comm"
@@ -231,6 +234,15 @@ def main() -> int:
         gc.disable()
     precheck_on[0] = False
     frames.clear()
+    motors = motors[: args.n_motors]
+    if args.busy_thread:
+        import threading
+
+        def _busy():
+            x = 0
+            while True:
+                x += 1
+        threading.Thread(target=_busy, daemon=True).start()
     # 3) 零力矩命令流：每圈给 8 个电机各发一帧
     print(f"[发送] {args.rate_hz:g} Hz × 8 电机，持续 {args.seconds:g} s")
     tx = []
@@ -281,8 +293,8 @@ def main() -> int:
                 next_pol_m = now_m + pol_dt_ns / 1e9
         if args.lite:
             lite_cyc.append(cyc_t)
-            if k % 10 == 0 and len(last_t) == len(MOTORS):
-                lite_ages.extend((cyc_t - last_t[c]) / 1e6 for c in MOTORS_IDS)
+            if k % 10 == 0 and all((0x10 + c) in last_t for c, _ in motors):
+                lite_ages.extend((cyc_t - last_t[0x10 + c]) / 1e6 for c, _ in motors)
         for cid, m in motors:
             tb = ns()
             ok = control.control_mit(m, 0.0, 0.0, 0.0, 0.0, 0.0)

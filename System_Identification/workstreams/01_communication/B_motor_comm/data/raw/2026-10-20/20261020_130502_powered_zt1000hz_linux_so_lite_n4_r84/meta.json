@@ -1,0 +1,49 @@
+{
+  "run_id": "20261020_130502_powered_zt1000hz_linux_so_lite_n4_r84",
+  "t_start_ns": 2818629464475,
+  "t_end_ns": 2838629525492,
+  "t_mono0_ns": 2818629456666,
+  "t_wall0_ns": 1792472704091559118,
+  "rate_hz": 1000.0,
+  "seconds": 20.0,
+  "cycles": 20000,
+  "tx_frames": 0,
+  "tx_fail": 0,
+  "policy": null,
+  "policy_hz": null,
+  "policy_ticks": 0,
+  "resources_every_5s": [
+    [
+      5.0,
+      27.3,
+      39.6
+    ],
+    [
+      10.0,
+      27.5,
+      39.4
+    ],
+    [
+      15.0,
+      27.8,
+      39.2
+    ]
+  ],
+  "priority": "normal",
+  "tail_s": 0.3,
+  "rx_frames_total": 80000,
+  "lite": true,
+  "process_cpu_s": 7.902,
+  "cpu_over_wall": 0.395,
+  "passive_frames_before_tx": 0,
+  "initial_status": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0
+  }
+}

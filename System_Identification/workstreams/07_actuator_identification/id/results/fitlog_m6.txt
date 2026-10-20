@@ -1,0 +1,442 @@
+Warp DeprecationWarning: warp.config.quiet is deprecated; use warp.config.log_level = warp.LOG_WARNING to suppress the init banner.
+拟合集 ['20261020_125047_id_RL_calf_tau_steps_r500', '20261020_125142_id_RL_calf_chirp_r500', '20261020_125222_id_RL_calf_ramp_r500']
+考试集 ['20261020_125258_id_RL_calf_multisine_r500']
+重启 0
+  gen    0  best 31.35  sigma 1.485  0s
+  gen   20  best 13.04  sigma 3.000  1s
+  gen   40  best 12.96  sigma 3.000  1s
+  gen   60  best 12.96  sigma 3.000  1s
+  gen   80  best 12.96  sigma 3.000  2s
+  gen  100  best 12.96  sigma 2.992  2s
+  gen  120  best 12.96  sigma 2.997  3s
+  gen  140  best 12.96  sigma 2.733  3s
+  gen  160  best 12.96  sigma 2.799  4s
+  gen  180  best 12.96  sigma 3.000  4s
+  gen  200  best 12.96  sigma 2.967  5s
+  gen  220  best 12.96  sigma 2.686  5s
+  gen  240  best 12.96  sigma 2.339  5s
+  gen  260  best 12.96  sigma 2.073  6s
+  gen  280  best 12.96  sigma 2.019  6s
+  gen  300  best 12.96  sigma 1.712  7s
+  gen  320  best 12.96  sigma 1.609  7s
+  gen  340  best 12.96  sigma 1.295  8s
+  gen  360  best 12.96  sigma 1.215  8s
+  gen  380  best 12.96  sigma 1.054  9s
+  gen  400  best 12.96  sigma 0.887  9s
+  gen  420  best 12.96  sigma 0.803  10s
+  gen  440  best 12.96  sigma 0.636  10s
+  gen  460  best 12.96  sigma 0.573  10s
+  gen  480  best 12.96  sigma 0.562  11s
+  gen  500  best 12.96  sigma 0.551  11s
+  gen  520  best 12.96  sigma 0.509  12s
+  gen  540  best 12.96  sigma 0.496  12s
+  gen  560  best 12.96  sigma 0.458  13s
+  gen  580  best 12.96  sigma 0.420  13s
+  gen  599  best 12.96  sigma 0.435  14s
+重启 1
+  gen    0  best 37.94  sigma 1.215  0s
+  gen   20  best 12.95  sigma 3.000  1s
+  gen   40  best 12.86  sigma 3.000  1s
+  gen   60  best 12.86  sigma 3.000  1s
+  gen   80  best 12.86  sigma 3.000  2s
+  gen  100  best 12.86  sigma 3.000  2s
+  gen  120  best 12.86  sigma 2.893  3s
+  gen  140  best 12.86  sigma 2.989  3s
+  gen  160  best 12.86  sigma 2.978  4s
+  gen  180  best 12.86  sigma 2.867  4s
+  gen  200  best 12.86  sigma 2.563  5s
+  gen  220  best 12.86  sigma 2.218  5s
+  gen  240  best 12.86  sigma 1.999  5s
+  gen  260  best 12.86  sigma 1.818  6s
+  gen  280  best 12.86  sigma 1.515  6s
+  gen  300  best 12.86  sigma 1.337  7s
+  gen  320  best 12.86  sigma 1.228  7s
+  gen  340  best 12.86  sigma 1.268  8s
+  gen  360  best 12.86  sigma 1.169  8s
+  gen  380  best 12.86  sigma 1.051  9s
+  gen  400  best 12.86  sigma 1.052  9s
+  gen  420  best 12.86  sigma 0.902  9s
+  gen  440  best 12.86  sigma 0.751  10s
+  gen  460  best 12.86  sigma 0.668  10s
+  gen  480  best 12.86  sigma 0.575  11s
+  gen  500  best 12.86  sigma 0.495  11s
+  gen  520  best 12.86  sigma 0.480  12s
+  gen  540  best 12.86  sigma 0.461  12s
+  gen  560  best 12.86  sigma 0.419  13s
+  gen  580  best 12.86  sigma 0.396  13s
+  gen  599  best 12.86  sigma 0.366  13s
+重启 2
+  gen    0  best 50.73  sigma 1.220  0s
+  gen   20  best 13.04  sigma 3.000  1s
+  gen   40  best 13.02  sigma 3.000  1s
+  gen   60  best 13.02  sigma 3.000  1s
+  gen   80  best 13.02  sigma 3.000  2s
+  gen  100  best 13.02  sigma 2.992  2s
+  gen  120  best 13.02  sigma 2.931  3s
+  gen  140  best 13.02  sigma 2.854  3s
+  gen  160  best 13.02  sigma 2.519  4s
+  gen  180  best 13.02  sigma 2.299  4s
+  gen  200  best 13.02  sigma 2.101  5s
+  gen  220  best 13.02  sigma 1.880  5s
+  gen  240  best 13.02  sigma 1.540  6s
+  gen  260  best 13.02  sigma 1.383  6s
+  gen  280  best 13.02  sigma 1.344  6s
+  gen  300  best 13.02  sigma 1.187  7s
+  gen  320  best 13.02  sigma 1.075  7s
+  gen  340  best 13.02  sigma 0.812  8s
+  gen  360  best 13.02  sigma 0.797  8s
+  gen  380  best 13.02  sigma 0.826  9s
+  gen  400  best 13.02  sigma 0.738  9s
+  gen  420  best 13.02  sigma 0.609  10s
+  gen  440  best 13.02  sigma 0.572  10s
+  gen  460  best 13.02  sigma 0.541  10s
+  gen  480  best 13.02  sigma 0.486  11s
+  gen  500  best 13.02  sigma 0.439  11s
+  gen  520  best 13.02  sigma 0.394  12s
+  gen  540  best 13.02  sigma 0.352  12s
+  gen  560  best 13.02  sigma 0.350  13s
+  gen  580  best 13.02  sigma 0.316  13s
+  gen  599  best 13.02  sigma 0.303  14s
+重启 3
+  gen    0  best 45.29  sigma 1.726  0s
+  gen   20  best 13.07  sigma 3.000  1s
+  gen   40  best 12.9  sigma 3.000  1s
+  gen   60  best 12.9  sigma 3.000  1s
+  gen   80  best 12.9  sigma 3.000  2s
+  gen  100  best 12.9  sigma 3.000  2s
+  gen  120  best 12.9  sigma 2.976  3s
+  gen  140  best 12.9  sigma 2.854  3s
+  gen  160  best 12.9  sigma 2.295  4s
+  gen  180  best 12.9  sigma 1.978  4s
+  gen  200  best 12.9  sigma 1.840  5s
+  gen  220  best 12.9  sigma 1.678  5s
+  gen  240  best 12.9  sigma 1.574  5s
+  gen  260  best 12.9  sigma 1.454  6s
+  gen  280  best 12.9  sigma 1.240  6s
+  gen  300  best 12.9  sigma 1.121  7s
+  gen  320  best 12.9  sigma 0.961  7s
+  gen  340  best 12.9  sigma 0.924  8s
+  gen  360  best 12.9  sigma 0.920  8s
+  gen  380  best 12.9  sigma 0.747  9s
+  gen  400  best 12.9  sigma 0.653  9s
+  gen  420  best 12.9  sigma 0.668  10s
+  gen  440  best 12.9  sigma 0.542  10s
+  gen  460  best 12.9  sigma 0.500  10s
+  gen  480  best 12.9  sigma 0.448  11s
+  gen  500  best 12.9  sigma 0.418  11s
+  gen  520  best 12.9  sigma 0.404  12s
+  gen  540  best 12.9  sigma 0.391  12s
+  gen  560  best 12.9  sigma 0.391  13s
+  gen  580  best 12.9  sigma 0.345  13s
+  gen  599  best 12.9  sigma 0.294  14s
+重启 4
+  gen    0  best 41.18  sigma 1.275  0s
+  gen   20  best 13.08  sigma 3.000  1s
+  gen   40  best 13.02  sigma 3.000  1s
+  gen   60  best 13.02  sigma 3.000  1s
+  gen   80  best 13.02  sigma 3.000  2s
+  gen  100  best 13.02  sigma 2.987  2s
+  gen  120  best 13.02  sigma 2.917  3s
+  gen  140  best 13.02  sigma 2.575  3s
+  gen  160  best 13.02  sigma 2.576  4s
+  gen  180  best 13.02  sigma 2.258  4s
+  gen  200  best 13.02  sigma 1.904  5s
+  gen  220  best 13.02  sigma 1.961  5s
+  gen  240  best 13.02  sigma 1.757  6s
+  gen  260  best 13.02  sigma 1.663  6s
+  gen  280  best 13.02  sigma 1.543  6s
+  gen  300  best 13.02  sigma 1.381  7s
+  gen  320  best 13.02  sigma 1.141  7s
+  gen  340  best 13.02  sigma 1.107  8s
+  gen  360  best 13.02  sigma 0.986  8s
+  gen  380  best 13.02  sigma 0.860  9s
+  gen  400  best 13.02  sigma 0.800  9s
+  gen  420  best 13.02  sigma 0.684  10s
+  gen  440  best 13.02  sigma 0.655  10s
+  gen  460  best 13.02  sigma 0.632  10s
+  gen  480  best 13.02  sigma 0.594  11s
+  gen  500  best 13.02  sigma 0.552  11s
+  gen  520  best 13.02  sigma 0.526  12s
+  gen  540  best 13.02  sigma 0.517  12s
+  gen  560  best 13.02  sigma 0.457  13s
+  gen  580  best 13.02  sigma 0.400  13s
+  gen  599  best 13.02  sigma 0.379  14s
+重启 5
+  gen    0  best 36.62  sigma 1.232  0s
+  gen   20  best 13  sigma 3.000  1s
+  gen   40  best 13  sigma 3.000  1s
+  gen   60  best 13  sigma 3.000  1s
+  gen   80  best 13  sigma 3.000  2s
+  gen  100  best 13  sigma 2.908  2s
+  gen  120  best 13  sigma 2.766  3s
+  gen  140  best 13  sigma 2.678  3s
+  gen  160  best 13  sigma 2.384  4s
+  gen  180  best 13  sigma 2.168  4s
+  gen  200  best 13  sigma 2.128  5s
+  gen  220  best 13  sigma 2.087  5s
+  gen  240  best 13  sigma 1.825  5s
+  gen  260  best 13  sigma 1.571  6s
+  gen  280  best 13  sigma 1.330  6s
+  gen  300  best 13  sigma 1.214  7s
+  gen  320  best 13  sigma 1.102  7s
+  gen  340  best 13  sigma 0.932  8s
+  gen  360  best 13  sigma 0.806  8s
+  gen  380  best 13  sigma 0.765  9s
+  gen  400  best 13  sigma 0.749  9s
+  gen  420  best 13  sigma 0.680  9s
+  gen  440  best 13  sigma 0.586  10s
+  gen  460  best 13  sigma 0.542  10s
+  gen  480  best 13  sigma 0.494  11s
+  gen  500  best 13  sigma 0.472  11s
+  gen  520  best 13  sigma 0.401  12s
+  gen  540  best 13  sigma 0.346  12s
+  gen  560  best 13  sigma 0.365  13s
+  gen  580  best 13  sigma 0.310  13s
+  gen  599  best 13  sigma 0.275  13s
+重启 6
+  gen    0  best 76.94  sigma 1.224  0s
+  gen   20  best 13.09  sigma 3.000  1s
+  gen   40  best 12.94  sigma 3.000  1s
+  gen   60  best 12.94  sigma 3.000  1s
+  gen   80  best 12.94  sigma 3.000  2s
+  gen  100  best 12.94  sigma 2.981  2s
+  gen  120  best 12.94  sigma 2.710  3s
+  gen  140  best 12.94  sigma 2.545  3s
+  gen  160  best 12.94  sigma 2.189  4s
+  gen  180  best 12.94  sigma 1.979  4s
+  gen  200  best 12.94  sigma 1.764  5s
+  gen  220  best 12.94  sigma 1.695  5s
+  gen  240  best 12.94  sigma 1.521  5s
+  gen  260  best 12.94  sigma 1.496  6s
+  gen  280  best 12.94  sigma 1.368  6s
+  gen  300  best 12.94  sigma 1.233  7s
+  gen  320  best 12.94  sigma 1.042  7s
+  gen  340  best 12.94  sigma 1.052  8s
+  gen  360  best 12.94  sigma 1.048  8s
+  gen  380  best 12.94  sigma 0.971  9s
+  gen  400  best 12.94  sigma 0.851  9s
+  gen  420  best 12.94  sigma 0.644  9s
+  gen  440  best 12.94  sigma 0.532  10s
+  gen  460  best 12.94  sigma 0.461  10s
+  gen  480  best 12.94  sigma 0.458  11s
+  gen  500  best 12.94  sigma 0.408  11s
+  gen  520  best 12.94  sigma 0.361  12s
+  gen  540  best 12.94  sigma 0.314  12s
+  gen  560  best 12.94  sigma 0.276  13s
+  gen  580  best 12.94  sigma 0.234  13s
+  gen  599  best 12.94  sigma 0.220  13s
+重启 7
+  gen    0  best 31.61  sigma 0.995  0s
+  gen   20  best 12.97  sigma 3.000  1s
+  gen   40  best 12.85  sigma 3.000  1s
+  gen   60  best 12.85  sigma 3.000  1s
+  gen   80  best 12.85  sigma 3.000  2s
+  gen  100  best 12.85  sigma 3.000  2s
+  gen  120  best 12.85  sigma 2.982  3s
+  gen  140  best 12.85  sigma 2.861  3s
+  gen  160  best 12.85  sigma 2.743  4s
+  gen  180  best 12.85  sigma 2.736  4s
+  gen  200  best 12.85  sigma 2.574  5s
+  gen  220  best 12.85  sigma 2.166  5s
+  gen  240  best 12.85  sigma 1.973  5s
+  gen  260  best 12.85  sigma 1.781  6s
+  gen  280  best 12.85  sigma 1.580  6s
+  gen  300  best 12.85  sigma 1.523  7s
+  gen  320  best 12.85  sigma 1.473  7s
+  gen  340  best 12.85  sigma 1.189  8s
+  gen  360  best 12.85  sigma 1.008  8s
+  gen  380  best 12.85  sigma 0.887  9s
+  gen  400  best 12.85  sigma 0.835  9s
+  gen  420  best 12.85  sigma 0.763  9s
+  gen  440  best 12.85  sigma 0.692  10s
+  gen  460  best 12.85  sigma 0.633  10s
+  gen  480  best 12.85  sigma 0.574  11s
+  gen  500  best 12.85  sigma 0.569  11s
+  gen  520  best 12.85  sigma 0.477  12s
+  gen  540  best 12.85  sigma 0.429  12s
+  gen  560  best 12.85  sigma 0.381  13s
+  gen  580  best 12.85  sigma 0.337  13s
+  gen  599  best 12.85  sigma 0.351  13s
+重启 8
+  gen    0  best 26.05  sigma 1.360  0s
+E:\HuanCun\Desktop\u2canfd\System_Identification\workstreams\07_actuator_identification\id\scripts\fit_actuator.py:203: RuntimeWarning: overflow encountered in multiply
+  per = c[..., 0] * W_Q + c[..., 1] * W_DQ + c[..., 2] * W_T
+  gen   20  best 12.94  sigma 3.000  1s
+  gen   40  best 12.91  sigma 3.000  1s
+  gen   60  best 12.91  sigma 3.000  1s
+  gen   80  best 12.91  sigma 3.000  2s
+  gen  100  best 12.91  sigma 2.933  2s
+  gen  120  best 12.91  sigma 2.866  3s
+  gen  140  best 12.91  sigma 2.988  3s
+  gen  160  best 12.91  sigma 2.665  4s
+  gen  180  best 12.91  sigma 2.395  4s
+  gen  200  best 12.91  sigma 2.036  5s
+  gen  220  best 12.91  sigma 1.971  5s
+  gen  240  best 12.91  sigma 1.910  5s
+  gen  260  best 12.91  sigma 1.866  6s
+  gen  280  best 12.91  sigma 1.665  6s
+  gen  300  best 12.91  sigma 1.286  7s
+  gen  320  best 12.91  sigma 1.237  7s
+  gen  340  best 12.91  sigma 1.137  8s
+  gen  360  best 12.91  sigma 0.937  8s
+  gen  380  best 12.91  sigma 0.780  9s
+  gen  400  best 12.91  sigma 0.653  9s
+  gen  420  best 12.91  sigma 0.574  9s
+  gen  440  best 12.91  sigma 0.481  10s
+  gen  460  best 12.91  sigma 0.438  10s
+  gen  480  best 12.91  sigma 0.411  11s
+  gen  500  best 12.91  sigma 0.365  11s
+  gen  520  best 12.91  sigma 0.325  12s
+  gen  540  best 12.91  sigma 0.340  12s
+  gen  560  best 12.91  sigma 0.349  13s
+  gen  580  best 12.91  sigma 0.336  13s
+  gen  599  best 12.91  sigma 0.298  14s
+重启 9
+  gen    0  best 36.1  sigma 1.182  0s
+  gen   20  best 12.96  sigma 3.000  1s
+  gen   40  best 12.87  sigma 3.000  1s
+  gen   60  best 12.87  sigma 3.000  1s
+  gen   80  best 12.87  sigma 3.000  2s
+  gen  100  best 12.87  sigma 3.000  2s
+  gen  120  best 12.87  sigma 2.982  3s
+  gen  140  best 12.87  sigma 2.963  3s
+  gen  160  best 12.87  sigma 2.712  4s
+  gen  180  best 12.87  sigma 2.724  4s
+  gen  200  best 12.87  sigma 2.471  5s
+  gen  220  best 12.87  sigma 2.301  5s
+  gen  240  best 12.87  sigma 2.038  5s
+  gen  260  best 12.87  sigma 2.146  6s
+  gen  280  best 12.87  sigma 2.053  6s
+  gen  300  best 12.87  sigma 1.862  7s
+  gen  320  best 12.87  sigma 1.459  7s
+  gen  340  best 12.87  sigma 1.270  8s
+  gen  360  best 12.87  sigma 1.069  8s
+  gen  380  best 12.87  sigma 1.005  9s
+  gen  400  best 12.87  sigma 0.834  9s
+  gen  420  best 12.87  sigma 0.788  9s
+  gen  440  best 12.87  sigma 0.690  10s
+  gen  460  best 12.87  sigma 0.719  10s
+  gen  480  best 12.87  sigma 0.720  11s
+  gen  500  best 12.87  sigma 0.694  11s
+  gen  520  best 12.87  sigma 0.598  12s
+  gen  540  best 12.87  sigma 0.507  12s
+  gen  560  best 12.87  sigma 0.456  13s
+  gen  580  best 12.87  sigma 0.437  13s
+  gen  599  best 12.87  sigma 0.437  13s
+{
+ "near_optimal_count": 23,
+ "param_ranges_5_95": {
+  "delay_ms": [
+   4.84930140693678,
+   7.580494906473022
+  ],
+  "tau_c_ms": [
+   0.14673732381501972,
+   0.3973615590523126
+  ],
+  "rate_lim": [
+   32.8659838044787,
+   68.95006455128981
+  ],
+  "inertia": [
+   0.03146189556663175,
+   0.042408489755500565
+  ],
+  "visc": [
+   0.02371202605333222,
+   0.06303417953551665
+  ],
+  "coul": [
+   0.37393562111579104,
+   0.4075941205775232
+  ],
+  "g0": [
+   0.020048386474644263,
+   0.043714686940001225
+  ],
+  "g1": [
+   1.5833373428228275,
+   2.876785459789971
+  ],
+  "kp_s": [
+   0.7086758426384223,
+   0.8087412062356499
+  ],
+  "kd_s": [
+   0.5180303185861723,
+   0.7025161482003505
+  ],
+  "ff_s": [
+   1.0603764094481662,
+   1.0841958164233763
+  ],
+  "q_bias": [
+   -0.002506847730081688,
+   0.00038879669098881744
+  ],
+  "tau_gain": [
+   0.9535084529014306,
+   0.9827676261949807
+  ]
+ },
+ "motor": 6,
+ "name": "RL_calf",
+ "fit_cost": 12.849072456359863,
+ "params": {
+  "delay_ms": 6.197382002924657,
+  "tau_c_ms": 0.19224374519978607,
+  "rate_lim": 33.2481390849861,
+  "inertia": 0.03597272552398494,
+  "visc": 0.040015178175561064,
+  "coul": 0.4008094509866384,
+  "g0": 0.031134791959460006,
+  "g1": 1.7601779806055262,
+  "kp_s": 0.7906848547479826,
+  "kd_s": 0.6360339236087482,
+  "ff_s": 1.0765944720220528,
+  "q_bias": -0.0010100729370708557,
+  "tau_gain": 0.9623215732164659
+ },
+ "fit_cost_ideal_sim": 578.827880859375,
+ "per_run": {
+  "20261020_125047_id_RL_calf_tau_steps_r500": {
+   "fit": [
+    1.4978960280132014e-05,
+    0.0016401903703808784,
+    0.009685000404715538
+   ],
+   "ideal_sim": [
+    0.005384371150285006,
+    1.0503312349319458,
+    0.3513791263103485
+   ]
+  },
+  "20261020_125142_id_RL_calf_chirp_r500": {
+   "fit": [
+    1.4755030861124396e-05,
+    0.004935269244015217,
+    0.009050353430211544
+   ],
+   "ideal_sim": [
+    9.581540507497266e-05,
+    0.027791215106844902,
+    0.16514478623867035
+   ]
+  },
+  "20261020_125222_id_RL_calf_ramp_r500": {
+   "fit": [
+    1.2728002730000298e-05,
+    0.0012565949000418186,
+    0.007183114532381296
+   ],
+   "ideal_sim": [
+    0.00012791082554031163,
+    0.0019323653541505337,
+    0.09972241520881653
+   ]
+  }
+ },
+ "rmse_note": "per_run 为 [q 均方误差 rad², dq rad²/s², 力矩 N²m²]；ideal_sim 为无延迟无滞后的标称仿真",
+ "exam_cost": 3.485377788543701,
+ "exam_cost_ideal_sim": 30.238332748413086
+}

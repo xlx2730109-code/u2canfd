@@ -38,6 +38,10 @@ send_loop:
 action:                                # 动作侧
   command_to_torque_closed_loop_ms: "<1.6"        # 位置阶跃（kp 28，闭环），1 kHz 分辨率上界，不是物理量，真实值推测 <1 ms 未分辨；三个关节、两个通道（07-K8、07-K9、07-K10）
   command_to_torque_open_loop_ms: "<2.6"          # 力矩脉冲（kp 0，kd 2）0.5 N·m，只有 500 Hz 的有效数据；kd=0 与 1 kHz 待补（01-T24）
+  torque_response:                     # 力矩到位（DeepSeek 开环 0.6 N·m，07-K11，我核对过他的原始曲线，未自己测）
+    first_order_tau_ms: [10, 12]
+    rise_10_90_ms: [18, 24]
+    note: 一阶滞后，进训练的参数应用这一项，不是上面的首次响应
   torque_to_motion_ms: 4.4-5.3         # 力矩出现到速度、位置超出噪声（物理过程，随 kp 变，kp 28 时）
   confidence: 中                        # 闭环三个关节一致；开环只有一个关节、500 Hz
   watchdog_timeout: 0                  # 8 台电机的 RID 9 全为 0（未启用），01-K75

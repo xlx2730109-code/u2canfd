@@ -1,0 +1,49 @@
+{
+  "run_id": "20261020_130556_powered_zt1000hz_linux_so_lite_busy_r86",
+  "t_start_ns": 2872068059296,
+  "t_end_ns": 2892082348805,
+  "t_mono0_ns": 2872068053471,
+  "t_wall0_ns": 1792472757530154899,
+  "rate_hz": 1000.0,
+  "seconds": 20.0,
+  "cycles": 447,
+  "tx_frames": 0,
+  "tx_fail": 0,
+  "policy": null,
+  "policy_hz": null,
+  "policy_ticks": 0,
+  "resources_every_5s": [
+    [
+      5.0,
+      25.6,
+      101.2
+    ],
+    [
+      10.1,
+      25.6,
+      101.6
+    ],
+    [
+      15.0,
+      25.9,
+      101.5
+    ]
+  ],
+  "priority": "normal",
+  "tail_s": 0.3,
+  "rx_frames_total": 3576,
+  "lite": true,
+  "process_cpu_s": 20.311,
+  "cpu_over_wall": 1.015,
+  "passive_frames_before_tx": 0,
+  "initial_status": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0
+  }
+}

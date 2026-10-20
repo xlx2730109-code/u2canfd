@@ -1,0 +1,88 @@
+{
+ "run_id": "20261020_125222_id_RL_calf_ramp_r500",
+ "motor": 6,
+ "name": "RL_calf",
+ "protocol": "ramp",
+ "rate_hz": 500.0,
+ "kp": 28.0,
+ "kd": 2.0,
+ "q0": 0.1829175249866477,
+ "bias_nm": -0.04137728937728923,
+ "abort": null,
+ "n_pre_replies": 264,
+ "n_cmds": 11650,
+ "n_replies_total": 11919,
+ "aligned": true,
+ "dll": "low_latency",
+ "timeout_ms": 300.0,
+ "timeout_raw": 6000,
+ "args": {
+  "protocol": "ramp",
+  "motor": 6,
+  "rate_hz": 500.0,
+  "kp": 28.0,
+  "kd": 2.0,
+  "amp": 0.06,
+  "duration_s": 25.0,
+  "f0": 0.2,
+  "f1": 8.0,
+  "speeds": [
+   0.05,
+   0.1,
+   0.2
+  ],
+  "cases": [
+   [
+    0.2,
+    20.0
+   ],
+   [
+    0.2,
+    60.0
+   ],
+   [
+    0.2,
+    150.0
+   ],
+   [
+    0.4,
+    20.0
+   ],
+   [
+    0.4,
+    60.0
+   ],
+   [
+    0.4,
+    100.0
+   ],
+   [
+    0.6,
+    20.0
+   ],
+   [
+    0.6,
+    40.0
+   ],
+   [
+    0.6,
+    60.0
+   ]
+  ],
+  "repeats": 3,
+  "seed": 1,
+  "timeout_ms": 300.0,
+  "timeout_unit_us": 50.0,
+  "execute": true
+ },
+ "info": {
+  "bias_nm": -0.04137728937728923,
+  "speeds": [
+   0.05,
+   0.1,
+   0.2
+  ],
+  "amp": 0.06
+ },
+ "note": "反馈第 n_pre+j 个对应命令第 j 个（状态码 1 的应答数等于命令数时 aligned 为真）"
+}
