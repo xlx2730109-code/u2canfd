@@ -116,7 +116,7 @@
 - go2-10 在真机上前进步态很好、迁移准确；缺点是后退差、转向难操作、加速度大、走路砰砰、抬腿快【用户确认，2026-10-16；真机效果未独立验证】。仿真数据印证了抬腿快与落地冲击大（抬腿最大上升速度 0.65–1.04 m/s，落地前下降速度 0.37–0.67 m/s），后退、侧移、转向只能达到指令的 0.6–0.7。
 - 域随机化范围**一律待定，不给具体数值**，后续再分析。候选项：base 质量、腿部杆件质量、base 质心、惯量、关节零位偏置。
 
-**sim2sim（MuJoCo）**：`bennett_rl/sim2sim/sim2sim.py --task <名> --endpoint_trail`；用户验证 sim2sim 没问题。
+**sim2sim（MuJoCo）**：`bennett_rl/sim2sim/sim2sim.py --task <名> --endpoint_trail`；用户验证 sim2sim 没问题。bennett_3 起 MuJoCo 里可用按真机命令重放校准的辨识执行器（`bennett_rl/sim2sim/actuator.py`，`bennett_rl/README.md` K61）；交互查看器已按实时速度运行。
 
 ## 7. 真机部署
 

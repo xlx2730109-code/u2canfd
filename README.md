@@ -1445,3 +1445,66 @@ sim2real/
 - [ ]  sim2real-T3：官方动态库下 T9 对约 109 ms 滞后不稳，真机若出现迟钝或摔倒，改用补丁版或 D4（sim2real-K5）。
 - [ ]  sim2real-T4：用户确认文件夹结构后，决定原位置文件是否删除。
 - [ ]  sim2real-T5：在另一台电脑上拷入整个 `sim2real/`，运行 `--check_only`，确认 Python 依赖与动态库齐全（sim2real-K8）。
+
+
+---
+
+# u2canfd
+目标：清理已确认废弃的文件，保留现用部署代码、辨识成果与可追溯的实验资料。
+
+## 基准与结论
+
+### A. 清理状态
+
+| 对象 | 大小 | 本轮处理 |
+| --- | ---: | --- |
+| `sysid_out/` | 5.8 MiB，37 个文件 | 已按用户要求删除 |
+| `_dlltest/` | 7.1 MiB | 已删除 |
+| Python `__pycache__/` | — | 已清理七处缓存 |
+| `logs/` | 703.8 MiB，4 个 CSV | 已按用户要求删除 |
+| 旧根目录脚本、`dlls_lowlatency/` 与旧部署副本 | — | 已删除不再被保留代码调用的部分 |
+| `damiao.py`、`dlls/`、`libusb-1.0.dll` | — | 保留辨识脚本仍需的旧驱动及依赖 |
+| `quad_leg_xu/bennett_deploy/imu.py` | — | 旧部署目录仅保留 IMU 采集仍引用的文件 |
+
+- **cleanup-K1**：`sysid_out/` 已从工作目录删除，删除前无本机修改或未跟踪文件；原文件已被 Git 跟踪，可从历史版本恢复。来源：2026-10-20 文件与 Git 状态检查。
+- **cleanup-K2**：`_dlltest/` 的五个 DLL 均在正式 `sim2real/sdk/` 内找到相同 SHA-256 的副本。来源：逐文件哈希比较。
+- **cleanup-K3**：当前仓库代码未检索到对 `_dlltest/` 的运行引用，文档只将其列为旧测试产物。来源：Python、Shell 与 Markdown 引用检索。
+- **cleanup-K4**：根目录 `logs/` 是旧实机运行 CSV，不能按 Python 缓存处理。来源：文件清单。
+- **cleanup-K5**：根目录早期脚本及 `quad_leg_xu/` 仍引用根目录 DLL；尚未整体清退前不能单独移除其依赖库。来源：代码引用检索。
+- **cleanup-K6**：本轮删除 131 个文件，共 833700454 字节；范围包括重复 DLL 测试产物、七处 Python 缓存、四个旧实机 CSV、旧根目录入口及旧部署副本。来源：删除前逐文件统计及删除后路径检查。
+- **cleanup-K7**：六个保留的辨识脚本仍从根目录 `damiao.py` 导入电机接口，该驱动在 Windows 加载根目录 `dlls/`。来源：`System_Identification/workstreams/01_communication/legacy_hardware/scripts/g0_snapshot.py`、`legacy_timing/scripts/probe_feedback_age_1khz.py` 及 `07_actuator_identification/scripts/` 的引用检索。
+- **cleanup-K8**：`System_Identification/workstreams/08_sensor_identification/scripts/imu_static_capture.py` 仍直接导入旧部署目录的 `imu.py`；迁移时须先适配该引用，再删除最后一份旧 IMU 文件。来源：该脚本导入段。
+
+### B. 迁移方案复核
+
+以下为建议，尚未执行迁移，尚未作为用户确认的选择。
+
+| 项目 | 建议 |
+| --- | --- |
+| 唯一正本 | 将现用部署与辨识代码复制到训练仓库的 `sim2real/` 与 `System_Identification/`，保留原有子目录层级 |
+| 部署策略 | `sim2real/policies/` 的小体积部署模型使用普通 Git 文件；训练模型仍沿用目标仓库 LFS 规则 |
+| 旧代码 | 不新建 `legacy/`；先修复 cleanup-K7、cleanup-K8 的依赖，再清退剩余旧文件 |
+| Jetson 认证 | 配置仅能读取目标仓库的部署密钥 |
+| 原始数据 | 本地完整复制并核对清单、哈希；原始数据不提交 Git，元数据和正式辨识结果按用途单独保留 |
+| Jetson 内容 | 纳入开机自启、SELECT 恢复、服务模板及环境说明；虚拟环境和运行日志留在仓库外 |
+| 切换方式 | Windows 迁入并验证后，Jetson 旁路克隆新仓库；保留旧运行目录，验证完成再切服务路径 |
+
+- **cleanup-K9**：目标仓库 `*.pt` 使用 LFS，且忽略 `**/*.so`；迁入部署模型和 ARM64 动态库时须明确设置对应范围的属性及忽略例外。来源：目标仓库 `.gitattributes`、`.gitignore`。
+- **cleanup-K10**：目标仓库 `git count-objects -v` 报告三个孤立索引及临时对象垃圾；该检查尚未证明当前提交缺失可达对象，不能据此直接执行 `git gc` 或删除 Git 对象。来源：2026-10-20 只读 Git 检查；[Git fsck 文档](https://git-scm.com/docs/git-fsck)。
+- **cleanup-K11**：目标仓库存在未提交的训练日志、README 和 `sim2sim/` 工作，不应为迁移而自动提交、暂存或重置这些改动。来源：2026-10-20 `git status --short`。
+- **cleanup-K12**：仅替换仓库根目录且保留内部层级时，`HERE.parents[4]` 不一定失效；迁移应逐个核对路径，不能将所有此类写法直接判为错误。来源：`07_actuator_identification/id/scripts/actuator_id.py` 与 `latency/scripts/action_latency.py` 的目录层级。
+- **cleanup-K13**：部署策略目录当前有七个 `.pt` 文件，合计 3189630 字节；普通文件方案仅针对部署包，不扩展到训练资产。来源：2026-10-20 文件统计。
+
+## 已完成
+
+- [x] 2026-10-20 删除用户明确不要的旧实验输出，未提交或推送删除（cleanup-K1）。
+- [x] 2026-10-20 盘点目录占用，比较重复 DLL 并检查代码引用（cleanup-K2—cleanup-K5）。
+- [x] **cleanup-T1** 2026-10-20 按用户确认清理重复 DLL 测试目录及 Python 缓存（cleanup-K6）。
+- [x] **cleanup-T2** 2026-10-20 按用户确认删除根目录四个旧实机 CSV（cleanup-K4、cleanup-K6）。
+- [x] 2026-10-20 删除旧入口和旧部署副本，保留辨识仍调用的驱动与 IMU；未修改辨识源代码，未提交或推送本轮删除（cleanup-K6—cleanup-K8）。
+- [x] 2026-10-20 阅读 Claude 迁移方案并核对目标仓库属性、忽略规则、Git 状态和路径层级；建议记录于 B，未执行迁移（cleanup-K9—cleanup-K13）。
+
+## 待完成
+
+- [ ] **cleanup-T3** 迁移时适配剩余辨识脚本的旧驱动和 IMU 引用，验证后删除 cleanup-K7、cleanup-K8 所列旧文件及其依赖。
+- [ ] **cleanup-T4** 用户确认 B 中迁移选择后实施；先保全当前工作，再迁入 Windows 代码与本地数据，最后验证并切换 Jetson。
