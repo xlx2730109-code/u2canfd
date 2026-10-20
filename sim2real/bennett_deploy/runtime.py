@@ -239,7 +239,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--roll_offset_deg", type=float, default=0.0)
     parser.add_argument("--pitch_offset_deg", type=float, default=0.0)
     parser.add_argument("--yaw_offset_deg", type=float, default=0.0)
-    parser.add_argument("--control_rate_hz", type=float, default=1000.0)
+    parser.add_argument("--control_rate_hz", type=float, default=500.0)  # 2026-10-20: 1 kHz 下 Jetson 盒子偶发失联，500 Hz 未出现（根 README 01-K94、01-T22）
     parser.add_argument("--log_csv", default=None)
     parser.add_argument("--overwrite_log", action="store_true", help="Allow replacing an existing CSV log")
     parser.add_argument(

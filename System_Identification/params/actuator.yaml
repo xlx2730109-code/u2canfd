@@ -7,7 +7,7 @@ date: 2026-10-20
 confidence: 中
 
 actuator_model:                          # 训练端采用的执行器模型（Isaac Lab）
-  type: PD + 纯延迟 + 摩擦              # 不加一阶滞后、不缩放 kp、kd
+  type: PD + 纯延迟 + 摩擦              # 建模选择，不是辨识结论：一阶滞后与纯延迟分不开（07-K18），选纯延迟是为了简化；滞后会衰减高频幅值、纯延迟不会，5 Hz 以内相位接近
   kp: 28
   kd: 2
   kp_scale: 1.0
@@ -32,5 +32,6 @@ summary:
   calf_coulomb_nm: [0.28, 0.43]
   note: MuJoCo 缺省 frictionloss 0.05、armature 0.01，与实测差 4–8 倍；训练的关节摩擦应改为实测
 validation:
+  # 注意：延迟主要改善的是力矩误差，位置与速度误差并没有变好（07-K21、07-K23）
   ms8_exam_mean_q_dq_tau: {plain: [3.24 mrad, 0.054 rad/s, 0.145 N·m], nominal_gain_plus_delay: [3.43, 0.055, 0.121], ideal_sim_before: 见 07-K19}
   pd_sweep_model_rmse_frthigh_mrad: 2.5   # 标称增益 + 实测惯量摩擦，30 个 kp/kd 组合
