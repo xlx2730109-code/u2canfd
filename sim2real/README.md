@@ -24,16 +24,15 @@ cd ~/workspaces/bennett_onboard/u2canfd
 bash sim2real/start_ros2_teleop.sh
 ```
 
-终端二：运行自由步态 S1。
+终端二：策略启动命令。
 
 ```bash
 ../policy_python.sh sim2real/bennett_1_free_deploy.py --ros2
-```
-
-终端二：运行爬行 T9。
-
-```bash
 ../policy_python.sh sim2real/bennett_1_crawl_deploy.py --ros2
+../policy_python.sh sim2real/quad_leg_go2-10_deploy.py --ros2
+../policy_python.sh sim2real/quad_leg_trot1_deploy.py --ros2
+../policy_python.sh sim2real/quad_leg_free_gait3_deploy.py --ros2
+../policy_python.sh sim2real/quad_leg_free_gait4_deploy.py --ros2
 ```
 
 策略终端显示等待后，将两个摇杆回中、松开 L1，长按 START 1 秒。程序此前不会打开 IMU 或使能电机；收到本次启动后的新 START 事件，才进入默认姿态并运行策略。不要在策略终端进入等待之前按 START。
@@ -291,7 +290,11 @@ sim2real/
 
 - **sim2real-K32**：手柄运行按终端和策略逐项列出完整命令，不再使用“改用以下命令”的表述。来源：用户指定的文档格式调整。
 
+- **sim2real-K33**：手柄策略命令按用户截图合并为一个代码块，每行一个完整入口，涵盖 S1、T9、go2-10、trot1、free_gait3 和 free_gait4。来源：用户指定的布局与现有部署入口。
+
 ## 已完成
+
+- [x] 2026-10-20 合并手柄策略命令代码块，补齐 GO2、trot 与两个旧自由步态入口；仅修改文档（sim2real-K33）。
 
 - [x] 2026-10-20 将 S1、T9 的手柄命令统一为直接标注终端、策略和完整命令的格式（sim2real-K32）。
 
