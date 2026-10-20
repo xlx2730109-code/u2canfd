@@ -18,22 +18,30 @@ DEFAULT_PORT = 19761
 class JoystickVelocity:
     """Proportional right-stick translation and left-stick yaw (ROS Joy axes)."""
 
-    def __init__(self, axes=(3, 4, 0), scales=(0.25, 0.12, 0.5), deadzone=0.05):
+    def __init__(self, axes=(3, 2, 0), scales=(0.25, 0.12, 0.5), deadzone=0.05, centers=ZERO):
         if len(axes) != 3 or any(type(i) is not int or i < 0 for i in axes):
             raise ValueError("expected three nonnegative axis indices")
         if not math.isfinite(deadzone) or not 0 <= deadzone < 1:
             raise ValueError("deadzone must be between zero and one")
         self.axes, self.scales, self.deadzone = tuple(axes), velocity(scales), deadzone
+        self.centers = velocity(centers)
+        if any(abs(center) >= 1 for center in self.centers):
+            raise ValueError("axis centers must be strictly between minus one and one")
 
     def command(self, axes: Sequence[float]) -> tuple[float, float, float]:
         try:
             values = velocity(tuple(axes[i] for i in self.axes))
         except (IndexError, TypeError, ValueError, OverflowError):
             return ZERO
-        def normalized(value):
-            magnitude = max(0.0, min(1.0, abs(value)) - self.deadzone) / (1.0 - self.deadzone)
-            return math.copysign(magnitude, value)
-        return tuple(normalized(value) * scale for value, scale in zip(values, self.scales))
+        def normalized(value, center):
+            # Preserve both full-scale endpoints when the measured center is offset.
+            delta = max(-1.0, min(1.0, value)) - center
+            span = 1.0 - center if delta >= 0 else 1.0 + center
+            displacement = delta / span
+            magnitude = max(0.0, abs(displacement) - self.deadzone) / (1.0 - self.deadzone)
+            return math.copysign(magnitude, displacement)
+        return tuple(normalized(value, center) * scale
+                     for value, center, scale in zip(values, self.centers, self.scales))
 
 
 def velocity(values: Sequence[float]) -> tuple[float, float, float]:

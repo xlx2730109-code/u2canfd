@@ -22,12 +22,14 @@ def main(argv=None) -> int:
     parser.add_argument("--timeout", type=float, default=0.25)
     parser.add_argument("--deadman-button", type=int, default=4)
     parser.add_argument("--stop-button", type=int, default=2)
-    parser.add_argument("--axes", type=int, nargs=3, default=(3, 4, 0), metavar=("VX", "VY", "WZ"))
+    parser.add_argument("--axes", type=int, nargs=3, default=(3, 2, 0), metavar=("VX", "VY", "WZ"))
     parser.add_argument("--scales", type=float, nargs=3, default=(0.25, 0.12, 0.5), metavar=("VX", "VY", "WZ"))
+    parser.add_argument("--centers", type=float, nargs=3, default=(0.0, 0.403943, 0.0), metavar=("VX", "VY", "WZ"),
+                        help="Raw neutral readings for this TGZ controller; recalibrate when replacing it")
     parser.add_argument("--deadzone", type=float, default=0.05)
     args, ros_args = parser.parse_known_args(argv)
     gate = TeleopGate(args.timeout, args.deadman_button, args.stop_button)
-    mapper = JoystickVelocity(args.axes, args.scales, args.deadzone)
+    mapper = JoystickVelocity(args.axes, args.scales, args.deadzone, args.centers)
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
     try:
@@ -74,7 +76,7 @@ def main(argv=None) -> int:
             f"buttons[{args.stop_button}] requests policy shutdown; timeout={args.timeout}s"
         )
         if not args.bridge_only:
-            node.get_logger().info(f"Proportional Joy axes vx/vy/wz={args.axes}; full-stick scales={args.scales}; deadzone={args.deadzone}")
+            node.get_logger().info(f"Proportional Joy axes vx/vy/wz={args.axes}; centers={args.centers}; full-stick scales={args.scales}; deadzone={args.deadzone}")
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
