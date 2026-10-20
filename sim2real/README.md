@@ -4,35 +4,33 @@
 
 ## 基准与结论
 
-### A. 命令
+### A. 运行命令
 
-在 `u2canfd/` 下运行（在 `sim2real/` 下运行时去掉 `sim2real/` 前缀）；用装有 torch 的环境（`env_isaaclab`）。**`--check_only` 与 `--dry_run` 不使能电机、不发运动命令；其余命令会连接并驱动真机，须用户当次明确同意。**
+本节使用已配置的 Jetson 总目录 `~/workspaces/bennett_onboard/`。`../policy_python.sh` 自动选用本目录的策略 Python 环境并设置 USB 库路径，后面的 `.py` 是实际策略程序。手柄模式用 `--ros2`，键盘模式用 `--keyboard`。
 
-不开电机的校验与试运行：
+#### 1. 进入目录
 
-```
-python sim2real/bennett_1_crawl_deploy.py --check_only
-python sim2real/bennett_1_crawl_deploy.py --dry_run --keyboard
-python sim2real/bennett_1_free_deploy.py --check_only
-python sim2real/tools/dev_sn.py
-```
+两个终端都先进入 Git 仓库；后续命令均在此目录运行：
 
-真机运行（开电机）：
-
-```
-python sim2real/bennett_1_crawl_deploy.py --keyboard
-python sim2real/bennett_1_free_deploy.py --keyboard
-python sim2real/quad_leg_free_gait3_deploy.py --keyboard
-python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latency
+```bash
+cd ~/workspaces/bennett_onboard/u2canfd
 ```
 
-ROS 2 手柄运行用两个终端。Jetson 的终端一启动手柄和比例映射命令桥：
+#### 2. ROS 2 手柄运行
+
+终端一启动手柄和比例映射命令桥：
 
 ```bash
 bash sim2real/start_ros2_teleop.sh
 ```
 
-终端二启动策略；Jetson 使用已配好的 `policy_python.sh`，已有正确环境时可用 `python`：
+终端二启动自由步态 S1：
+
+```bash
+../policy_python.sh sim2real/bennett_1_free_deploy.py --ros2
+```
+
+要运行爬行 T9，终端二改用以下命令，两条策略命令只运行一条：
 
 ```bash
 ../policy_python.sh sim2real/bennett_1_crawl_deploy.py --ros2
@@ -59,6 +57,56 @@ B 和松开 L1 都只控制速度输入，策略仍可调整腿部；默认姿�
 
 左摇杆前后不使用；中心死区为 5%，中位补偿后在死区外按摇杆幅度线性增加速度，满推达到上表数值。当前轴索引为 `--axes 3 2 0`；右摇杆前后对应轴 3、左右对应轴 2，左摇杆左右对应轴 0，已完成逐项实际输入验证。`--scales` 配置满幅速度，`--centers` 配置对应三轴的原始中位读数；当前 TGZ 使用 `0 0.403943 0`，换手柄或模式后需重新核对。
 
+#### 3. 键盘运行
+
+键盘模式会先使能电机并回到默认姿态，准备完成后按空格或 Enter 开始策略；不需要启动手柄桥。键盘与手柄模式二选一。
+
+运行自由步态 S1：
+
+```bash
+../policy_python.sh sim2real/bennett_1_free_deploy.py --keyboard
+```
+
+运行爬行 T9：
+
+```bash
+../policy_python.sh sim2real/bennett_1_crawl_deploy.py --keyboard
+```
+
+运行旧版自由步态 gait3：
+
+```bash
+../policy_python.sh sim2real/quad_leg_free_gait3_deploy.py --keyboard
+```
+
+需要显式选择 `low_latency` 动态库时，使用以下 T9 命令：
+
+```bash
+../policy_python.sh sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latency
+```
+
+#### 4. 指定新策略
+
+保持手柄模式，选择同类新 run 的导出文件；将 `my_new_run` 换成实际目录名：
+
+```bash
+../policy_python.sh sim2real/bennett_1_free_deploy.py --ros2 --policy sim2real/policies/my_new_run/exported/policy.pt
+```
+
+新 run 必须同时包含同次训练的 `params/env.yaml`、`params/agent.yaml`；爬行策略换用 `bennett_1_crawl_deploy.py` 入口。
+
+#### 5. 拉取更新
+
+Windows 提交并推送后，在本节指定的 Git 仓库内拉取：
+
+```bash
+git pull --ff-only
+```
+
+Jetson 当前只展开 `sim2real/` 和仓库根文件；Windows 中其他目录未展开，因此资源管理器里的目录列表不同。拉取会保留该范围，Git 跟踪的文件仍会随远端提交更新或删除；本机有改动或冲突时先处理，不强制覆盖。上一级的策略环境、USB 库和 ROS 工作区不属于该 Git 副本。
+
+#### 6. 入口与参数
+
 入口脚本：
 
 | 入口 | 策略 |
@@ -72,10 +120,9 @@ B 和松开 L1 都只控制速度输入，策略仍可调整腿部；默认姿�
 
 | 参数 | 作用 |
 | --- | --- |
+| `--ros2` | 手柄输入，等待本次接收器创建后的新 START 长按事件，再初始化 IMU 与电机 |
 | `--keyboard` | 键盘给速度指令；电机回到默认姿态并预热后，按空格或回车才启动策略 |
-| `--check_only` | 只校验训练配置与 TorchScript 策略，不打开 IMU 与电机 |
-| `--dry_run` | 读 IMU、跑策略，不打开电机 |
-| `--dm_sdk_profile original` / `low_latency` | 选电机动态库：缺省 Windows 为 `low_latency`、Linux 为 `original`（2026-10-19 起，此前缺省 `original`）；`original` 为官方版，反馈约每 110–120 ms 一批；`low_latency` 为补丁版，反馈时龄均值约 7 ms，仅 Windows 有。用 T9 等训练时没加滞后的策略、真机迟钝或摔倒时再试 |
+| `--dm_sdk_profile original` / `low_latency` | 选择当前平台已配置的电机动态库；Jetson 使用 ARM64 `.so`，具体版本见运行时打印的 `[DM-SDK]` |
 | `--imu_port <串口>` | IMU 串口；Windows 缺省 `COM6`，Linux 缺省 `/dev/ttyACM0`（推测），以实际枚举为准 |
 | `--output_scale <0–1>` | 策略动作的缩放，首次试验取小值 |
 | `--active_joints rr` | 只驱动 RR 的两个关节，缺省 `all` |
@@ -87,6 +134,7 @@ B 和松开 L1 都只控制速度输入，策略仍可调整腿部；默认姿�
 - 策略已打包在 `sim2real/policies/`，缺省不需要 `bennett_rl`，整个 `sim2real/` 拷到另一台电脑即可运行；另需 Python（含 torch）、pyserial、pyusb、dmcan-sdk，Linux 另需 libusb（见 `docs/WORKFLOW.md`）。
 - 换 bennett_1 的策略：环境变量 `BENNETT1_CRAWL_RUN=T9|D4`、`BENNETT1_FREE_RUN=S1`（打包的别名），或 `bennett_rl/logs/rsl_rl/` 下的完整运行目录名，或 `--policy`。
 - 打包的策略找不到时才去 `bennett_rl` 找：环境变量 `BENNETT_RL_ROOT`，否则取同级目录 `bennett_rl`，再否则取本仓库所在盘符下的 `Project/Isaaclab/bennett_rl`。
+- Windows 在已配置依赖的 Python 环境中运行同一入口，将本节命令的 `../policy_python.sh` 换成 `python`；该 `.sh` 是 Jetson 总目录的启动包装，不是另一套策略。
 
 ### B. 文件夹结构
 
@@ -239,7 +287,11 @@ sim2real/
 
 - **sim2real-K30**：Windows Python 与 Jetson 策略 Python 的 START/B 输入及初始化替身测试均通过，包括拒绝短按、非中位、按住 L1、B 同时按下和旧 START 事件，以及未启动时不初始化 IMU/CAN；真实手柄已完成 K26—K29 的流程验证，整机运动效果尚未验证。来源：2026-10-20 两平台有限测试与实际 ROS 采集。
 
+- **sim2real-K31**：A 节命令已按现有 Jetson 总目录统一为 `../policy_python.sh`，优先展示 S1 手柄运行，保留 T9、键盘和新策略用法；静默测试模板已移出运行说明。来源：Jetson `policy_python.sh` 与用户指定的文档调整。
+
 ## 已完成
+
+- [x] 2026-10-20 将 A 节整理为 Jetson 的目录、手柄、键盘、新策略与拉取命令；补充稀疏检出造成的两端目录差异，未运行硬件命令（sim2real-K31）。
 
 - [x] **sim2real-T7** 2026-10-20 完成实际 START 解锁、L1 放行、B 锁存、松开 B 不自动恢复及 START 恢复验证；采集已退出，未运行电机程序（sim2real-K26—sim2real-K30）。
 
