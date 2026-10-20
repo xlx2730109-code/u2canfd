@@ -1,3 +1,12 @@
 E:\HuanCun\Desktop\u2canfd\System_Identification\workstreams\07_actuator_identification\id\scripts\fit_actuator_v2.py:207: RuntimeWarning: overflow encountered in multiply
   per = c[..., 0] * W_Q + c[..., 1] * W_DQ + c[..., 2] * W_T
 FL_thigh {'full': (8.3, 2.92, 6.62), 'report_lag_only': (8.1, 3.14, 6.68), 'delay_only': (8.7, 3.05, 6.63), 'no_delay': (8.4, 3.05, 6.81), 'rate_only': (8.4, 3.59, 7.39), 'ideal_sim': (512.1, 25.34, 53.39)}
+FL_calf {'full': (27.4, 3.82, 22.55), 'report_lag_only': (27.2, 3.76, 22.48), 'delay_only': (27.8, 3.51, 22.16), 'no_delay': (27.6, 4.1, 22.91), 'rate_only': (27.4, 3.82, 22.55), 'ideal_sim': (608.2, 37.65, 58.15)}
+FR_thigh {'full': (11.7, 4.51, 10.06), 'report_lag_only': (11.8, 4.58, 10.51), 'delay_only': (12.5, 4.72, 10.85), 'no_delay': (11.8, 4.52, 10.0), 'rate_only': (12.2, 4.89, 11.23), 'ideal_sim': (496.8, 26.09, 52.75)}
+FR_calf {'full': (14.8, 4.08, 32.32), 'report_lag_only': (13.6, 3.78, 33.07), 'delay_only': (15.4, 4.05, 32.15), 'no_delay': (14.8, 4.17, 32.64), 'rate_only': (15.3, 4.05, 32.07), 'ideal_sim': (524.4, 29.23, 54.3)}
+RL_thigh {'full': (20.9, 3.36, 15.18), 'report_lag_only': (22.0, 3.21, 14.97), 'delay_only': (22.6, 3.17, 14.64), 'no_delay': (21.0, 3.45, 15.32), 'rate_only': (22.4, 3.24, 14.88), 'ideal_sim': (542.0, 29.03, 45.86)}
+RL_calf {'full': (12.9, 3.53, 7.98), 'report_lag_only': (11.9, 3.09, 7.15), 'delay_only': (13.1, 3.31, 7.62), 'no_delay': (13.3, 3.39, 7.69), 'rate_only': (12.9, 3.4, 7.78), 'ideal_sim': (578.8, 30.24, 63.21)}
+E:\HuanCun\Desktop\u2canfd\System_Identification\workstreams\07_actuator_identification\id\scripts\fit_actuator_v2.py:275: RuntimeWarning: overflow encountered in exp
+  us = 1.0 / (1.0 + np.exp(-zs))
+RR_thigh {'full': (9.5, 2.67, 10.91), 'report_lag_only': (9.2, 2.64, 10.87), 'delay_only': (10.0, 2.78, 11.04), 'no_delay': (9.6, 2.71, 11.39), 'rate_only': (10.0, 2.85, 10.54), 'ideal_sim': (535.1, 26.71, 72.83)}
+RR_calf {'full': (20.7, 3.66, 9.67), 'report_lag_only': (17.4, 3.55, 8.84), 'delay_only': (20.7, 3.66, 9.57), 'no_delay': (19.1, 3.76, 8.47), 'rate_only': (20.3, 3.88, 8.04), 'ideal_sim': (522.4, 23.02, 47.63)}

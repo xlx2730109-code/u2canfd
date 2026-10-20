@@ -1,0 +1,8 @@
+FL_thigh  ms8[q mrad, dq, tau]  plain 2.12 0.0514 0.113 | 名义增益+延迟 2.25 0.0499 0.0865 | 全模型 1.95 0.052 0.085   (delay=7.9 ms)
+FL_calf   ms8[q mrad, dq, tau]  plain 5.68 0.0513 0.165 | 名义增益+延迟 5.78 0.0528 0.145 | 全模型 5.56 0.0599 0.156   (delay=8.0 ms)
+FR_thigh  ms8[q mrad, dq, tau]  plain 1.87 0.0557 0.142 | 名义增益+延迟 2.08 0.0595 0.109 | 全模型 2.37 0.0624 0.105   (delay=7.9 ms)
+FR_calf   ms8[q mrad, dq, tau]  plain 4.95 0.0568 0.206 | 名义增益+延迟 5 0.0574 0.192 | 全模型 6.3 0.0626 0.188   (delay=10.2 ms)
+RL_thigh  ms8[q mrad, dq, tau]  plain 5.25 0.0497 0.135 | 名义增益+延迟 5.21 0.0434 0.124 | 全模型 3.98 0.0451 0.13   (delay=7.5 ms)
+RL_calf   ms8[q mrad, dq, tau]  plain 1.96 0.0444 0.133 | 名义增益+延迟 2.36 0.0536 0.101 | 全模型 2.92 0.052 0.091   (delay=12.0 ms)
+RR_thigh  ms8[q mrad, dq, tau]  plain 2.23 0.0578 0.153 | 名义增益+延迟 2.48 0.0562 0.11 | 全模型 2.45 0.058 0.111   (delay=9.8 ms)
+RR_calf   ms8[q mrad, dq, tau]  plain 1.84 0.0627 0.109 | 名义增益+延迟 2.32 0.064 0.101 | 全模型 2.86 0.0683 0.0941   (delay=12.0 ms)

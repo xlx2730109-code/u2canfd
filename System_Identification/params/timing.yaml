@@ -36,15 +36,13 @@ send_loop:
   frame_loss_ppm: 0                    # 逐帧发送 5 次运行无丢帧，01-K92、01-K93
 
 action:                                # 动作侧
-  command_to_torque_closed_loop_ms: "<1.6"        # 位置阶跃（kp 28，闭环），1 kHz 分辨率上界，不是物理量，真实值推测 <1 ms 未分辨；三个关节、两个通道（07-K8、07-K9、07-K10）
-  command_to_torque_open_loop_ms: "<2.6"          # 力矩脉冲（kp 0，kd 2）0.5 N·m，只有 500 Hz 的有效数据；kd=0 与 1 kHz 待补（01-T24）
-  torque_response:                     # 力矩到位（DeepSeek 开环 0.6 N·m，07-K11，我核对过他的原始曲线，未自己测）
-    first_order_tau_ms: [10, 12]
-    rise_10_90_ms: [18, 24]
-    note: 一阶滞后，进训练的参数应用这一项，不是上面的首次响应
+  equivalent_pure_delay_ms: [7.5, 12.0]     # 标称增益拟合的等效纯延迟（07-K21）；训练取 5–12 ms 随机，详见 actuator.yaml
+  first_response_ms: "<1.6"                   # 命令到力矩首次出现，1 kHz 分辨率上界（07-K8），不是等效延迟
+  torque_report_rise_10_90_ms: [15, 30]       # 上报力矩开环上升时间（07-K11），位置速度数据分不开真实滞后与纯延迟（07-K18），不进训练
+  gains: 标称 kp 28、kd 2，不缩放（07-K22）
+  confidence: 中
   torque_to_motion_ms: 4.4-5.3         # 力矩出现到速度、位置超出噪声（物理过程，随 kp 变，kp 28 时）
-  confidence: 中                        # 闭环三个关节一致；开环只有一个关节、500 Hz
-  watchdog_timeout: 0                  # 8 台电机的 RID 9 全为 0（未启用），01-K75
+  watchdog_timeout: 0                  # 8 台电机的 RID 9 全为 0（未启用）；实测写入 6000（约 300 ms）有效，01-K95
 
 reliability:
   device_disappearance: 1 kHz 持续 5 分钟以上 3/6 失联（反馈全停、需拔插），500 Hz 0/4（DeepSeek 合并统计称 1 kHz 约 2/3、500 Hz 0/6，待逐条对账），成因未知（01-K91、01-K94）

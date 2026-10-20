@@ -1,0 +1,8 @@
+拟合集 17 个运行，考试集 17 个运行；Tmax 21450
+基线（训练缺省模型）拟合集代价 464.2
+  gen    0 best 321.4 sigma 0.987 24s
+  gen   10 best 260.5 sigma 3.000 150s
+  gen   20 best 237.6 sigma 3.000 276s
+  gen   30 best 231.6 sigma 2.749 401s
+  gen   40 best 228.8 sigma 2.452 525s
+  gen   50 best 221.2 sigma 2.531 645s

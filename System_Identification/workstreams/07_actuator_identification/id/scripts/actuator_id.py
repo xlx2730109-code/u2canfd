@@ -138,7 +138,23 @@ def build_multisine(args, rate, q0, bias):
     return seq, {"freqs": freqs, "phases": phases, "amp": args.amp, "duration_s": args.duration_s}
 
 
-BUILDERS = {"tau_steps": build_tau_steps, "chirp": build_chirp, "ramp": build_ramp, "multisine": build_multisine}
+def build_pd_grid(args, rate, q0, bias):
+    """PD 扫描：每个 (kp, kd) 组合依次做 q0 -> +a -> q0 -> -a -> q0 的位置阶跃，每段 0.5 s，重复两遍；组合按阻尼比从大到小排序（最稳的先做）。"""
+    inertia = 0.045
+    combos = list(args.pd_grid)
+    combos.sort(key=lambda kk: -(kk[1] / (2 * math.sqrt(kk[0] * inertia))))
+    n = lambda sec: max(1, round(sec * rate))
+    seq = [Cmd(args.kp, args.kd, q0, 0.0, "hold0") for _ in range(n(1.0))]
+    for i, (kp, kd) in enumerate(combos):
+        seq += [Cmd(kp, kd, q0, 0.0, "pd_settle", i) for _ in range(n(0.5))]
+        for rep in range(2):
+            for off in (args.amp, 0.0, -args.amp, 0.0):
+                seq += [Cmd(kp, kd, q0 + off, 0.0, "pd_up" if off > 0 else ("pd_dn" if off < 0 else "pd_back"), i) for _ in range(n(0.5))]
+    seq += [Cmd(args.kp, args.kd, q0, 0.0, "hold_end") for _ in range(n(0.5))]
+    return seq, {"combos": combos, "amp": args.amp}
+
+
+BUILDERS = {"tau_steps": build_tau_steps, "chirp": build_chirp, "ramp": build_ramp, "multisine": build_multisine, "pd_grid": build_pd_grid}
 
 
 def main() -> int:
@@ -156,6 +172,9 @@ def main() -> int:
     ap.add_argument("--cases", type=lambda t: [(float(a), float(w)) for a, w in (x.split(":") for x in t.split(","))],
                     default="0.2:20,0.2:60,0.2:150,0.4:20,0.4:60,0.4:100,0.6:20,0.6:40,0.6:60",
                     help="tau_steps 的 幅值N·m:宽度ms 列表；位移约与 幅值*宽度² 成正比，0.6 N·m 在 150 ms 时 FR_calf 位移已达 0.12 rad，所以大幅值配短宽度")
+    ap.add_argument("--pd_grid", type=lambda t: [(float(a), float(b)) for a, b in (x.split(":") for x in t.split(","))],
+                    default=",".join(f"{kp}:{kd}" for kp in (14, 20, 28, 40, 56) for kd in (0.5, 1, 1.5, 2, 3, 4)),
+                    help="pd_grid 的 kp:kd 列表")
     ap.add_argument("--repeats", type=int, default=3, help="tau_steps 每个(幅值,宽度)的重复次数（正负各一次）")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--timeout_ms", type=float, default=0.0)
@@ -170,7 +189,10 @@ def main() -> int:
     if args.amp > MAX_POS_AMP or args.f1 > MAX_CHIRP_HZ or args.f0 <= 0 or args.f1 <= args.f0:
         print(f"[拒绝] 位置幅值 <= {MAX_POS_AMP} rad，chirp 频率范围需 0 < f0 < f1 <= {MAX_CHIRP_HZ} Hz")
         return 1
-    if args.kp * args.amp > TAULIM * 0.8 and args.protocol != "tau_steps":
+    if args.protocol == "pd_grid" and (max(kp for kp, _ in args.pd_grid) * args.amp > TAULIM * 0.65 or min(kd for _, kd in args.pd_grid) < 0.3):
+        print("[拒绝] pd_grid：kp*幅值 超过力矩保护的 65%，或 kd < 0.3（kd 过小可能振荡）")
+        return 1
+    if args.kp * args.amp > TAULIM * 0.8 and args.protocol not in ("tau_steps", "pd_grid"):
         print(f"[拒绝] kp*幅值 = {args.kp * args.amp:.2f} N·m 超过力矩保护的 80%")
         return 1
     timeout_raw = 0
@@ -191,6 +213,7 @@ def main() -> int:
     print(f"计划：电机 {args.motor}（{NAMES[args.motor]}），协议 {args.protocol}，{args.rate_hz:g} Hz，保持增益 kp={args.kp:g} kd={args.kd:g}，"
           f"共 {len(plan_seq)} 个周期（{len(plan_seq) / args.rate_hz:.0f} s）。"
           + (f"事件数 {len(plan_info['cases'])}。" if "cases" in plan_info else "")
+          + (f"PD 组合 {len(plan_info['combos'])} 个。" if "combos" in plan_info else "")
           + (f" 看门狗 {args.timeout_ms:g} ms（寄存器值 {timeout_raw}）。" if timeout_raw else " 看门狗：未设置。")
           + f" 保护：位置偏离 {QLIM_HOLD}/{QLIM_FREE} rad、|dq| {DQLIM} rad/s、力矩 {TAULIM} N·m、反馈中断 {SILENCE_S * 1e3:g} ms。")
     if not args.execute:

@@ -70,7 +70,7 @@ def sim_kernel(params: wp.array2d(dtype=wp.float32),
                qm_a: wp.array(dtype=wp.float32), dqm_a: wp.array(dtype=wp.float32), tm_a: wp.array(dtype=wp.float32),
                run_start: wp.array(dtype=wp.int32), run_len: wp.array(dtype=wp.int32), run_q0: wp.array(dtype=wp.float32),
                run_t0: wp.array(dtype=wp.float32), run_skip: wp.array(dtype=wp.int32),
-               n_runs: int, period: float, sub: int, tmax: float,
+               n_runs: int, period: float, sub: int, tmax: float, mode: int,
                out: wp.array2d(dtype=wp.float32), pred_q: wp.array(dtype=wp.float32), pred_dq: wp.array(dtype=wp.float32), pred_t: wp.array(dtype=wp.float32),
                save_pred: int):
     tid = wp.tid()
@@ -97,6 +97,7 @@ def sim_kernel(params: wp.array2d(dtype=wp.float32),
     q = q0
     dq = float(0.0)
     tm = run_t0[r]
+    tu = run_t0[r]
     alpha = 1.0 - wp.exp(-dt / tc)
     e_q = float(0.0)
     e_dq = float(0.0)
@@ -121,7 +122,10 @@ def sim_kernel(params: wp.array2d(dtype=wp.float32),
             lim = rate_lim * dt
             d = wp.clamp(d, -lim, lim)
             tm = tm + d
-            acc = (tm - g0 - g1 * (q - q0) - visc * dq - coul * wp.tanh(dq / 0.02)) / inertia
+            tu = tm
+            if mode == 1:
+                tu = tau_cmd
+            acc = (tu - g0 - g1 * (q - q0) - visc * dq - coul * wp.tanh(dq / 0.02)) / inertia
             dq = dq + acc * dt
             q = q + dq * dt
         if save_pred != 0:
@@ -180,7 +184,7 @@ class Dataset:
         self.device = device
         self.var = [float(np.var(np.concatenate(qm))), float(np.var(np.concatenate(dqm))), float(np.var(np.concatenate(tm)))]
 
-    def evaluate(self, phys: np.ndarray, tmax: float = 12.0, save_pred: bool = False):
+    def evaluate(self, phys: np.ndarray, tmax: float = 12.0, save_pred: bool = False, mode: int = 0):
         """phys: [N,P] 物理参数；返回 cost[N,runs,3]（均方误差）及可选的预测。"""
         n = phys.shape[0]
         params = wp.array(phys.astype(np.float32), dtype=wp.float32, device=self.device)
@@ -190,7 +194,7 @@ class Dataset:
         pdq = wp.zeros(size, dtype=wp.float32, device=self.device)
         pt = wp.zeros(size, dtype=wp.float32, device=self.device)
         wp.launch(sim_kernel, dim=n * self.n_runs, inputs=[params, self.kp, self.kd, self.qd, self.ff, self.qm, self.dqm, self.tm,
-                                                           self.start, self.len, self.q0, self.t0, self.skip, self.n_runs, self.period, S_SUB, tmax,
+                                                           self.start, self.len, self.q0, self.t0, self.skip, self.n_runs, self.period, S_SUB, tmax, mode,
                                                            out, pq, pdq, pt, 1 if save_pred else 0], device=self.device)
         c = out.numpy().reshape(n, self.n_runs, 3)
         if save_pred:
@@ -258,7 +262,7 @@ class CMAES:
         self.gen += 1
 
 
-def fit(ds: Dataset, gens: int, lam: int, seed: int, x0_unit=None, verbose=True, run_w=None):
+def fit(ds: Dataset, gens: int, lam: int, seed: int, x0_unit=None, verbose=True, run_w=None, mode: int = 0):
     best_x, best_f = None, np.inf
     rng = np.random.default_rng(seed)
     # CMA 在无约束空间 z 里搜索，u = sigmoid(z) 映射到 [0,1]，避免边界截断破坏步长自适应
@@ -269,7 +273,7 @@ def fit(ds: Dataset, gens: int, lam: int, seed: int, x0_unit=None, verbose=True,
     for g in range(gens):
         zs = es.ask()
         us = 1.0 / (1.0 + np.exp(-zs))
-        c = ds.evaluate(from_unit(us))
+        c = ds.evaluate(from_unit(us), mode=mode)
         f = total_cost(c, run_w)
         es.tell(zs, f)
         k = int(np.argmin(f))

@@ -1,0 +1,36 @@
+# 执行器参数（工作包 07）。版本 v1，生成 2026-10-20。
+# 来源：07-K12 至 07-K22；数据 07_actuator_identification/id/data/raw/2026-10-20；拟合 id/results/*.json。
+# 条件：Jetson，`low_latency` 库，500 Hz，机器人悬空，每次只使能一个电机（单关节）；ms8 为八台同时；电池未记录（07-K20）。
+# 置信度：中。惯量、摩擦、延迟的相对大小可靠；单关节模型对闭链小腿不完整，小腿的惯量与摩擦只作参考。
+version: 1
+date: 2026-10-20
+confidence: 中
+
+actuator_model:                          # 训练端采用的执行器模型（Isaac Lab）
+  type: PD + 纯延迟 + 摩擦              # 不加一阶滞后、不缩放 kp、kd
+  kp: 28
+  kd: 2
+  kp_scale: 1.0
+  kd_scale: 1.0
+  delay_ms: {min: 5, max: 12}           # 等效纯延迟，随机化范围；各关节拟合值见下表
+  kd_practical_max: 2.5                 # kd >= 3 在 kp 14–28 时静止抖动（07-K22）
+  torque_feedback_offset_nm: -0.035     # 反馈力矩常值偏置，不要用力矩做观测（07-K16）
+
+joint_friction_and_inertia:             # 单关节拟合，仅延迟结构（07-K18）；inertia 含折算转子惯量
+  # 全部按标称 kp、kd（比例 1.0）拟合；单位 ms、kg·m²、N·m、N·m·s/rad、N·m、N·m/rad
+  FL_thigh: {delay_ms: 7.9, inertia: 0.053, coulomb: 0.22, viscous: 0.000, gravity_g0: -0.020, gravity_g1: +1.40}  # 大腿，可采用；自由增益拟合的 kp/kd 比例 1.06/0.95（07-K18）
+  FR_thigh: {delay_ms: 7.9, inertia: 0.052, coulomb: 0.20, viscous: 0.000, gravity_g0: -0.037, gravity_g1: +1.10}  # 大腿，可采用；自由增益拟合的 kp/kd 比例 1.07/0.94（07-K18）
+  RL_thigh: {delay_ms: 7.5, inertia: 0.050, coulomb: 0.21, viscous: 0.000, gravity_g0: -0.144, gravity_g1: +1.08}  # 大腿，可采用；自由增益拟合的 kp/kd 比例 1.09/0.94（07-K18）
+  RR_thigh: {delay_ms: 9.8, inertia: 0.055, coulomb: 0.24, viscous: 0.000, gravity_g0: -0.021, gravity_g1: +1.31}  # 大腿，可采用；自由增益拟合的 kp/kd 比例 1.06/0.93（07-K18）
+  FL_calf: {delay_ms: 8.0, inertia: 0.038, coulomb: 0.39, viscous: 0.000, gravity_g0: -0.128, gravity_g1: +1.51}  # 小腿，闭链结构不完整，仅作参考；自由增益拟合的 kp/kd 比例 0.74/0.49（07-K18）
+  FR_calf: {delay_ms: 10.2, inertia: 0.046, coulomb: 0.27, viscous: 0.000, gravity_g0: +0.146, gravity_g1: +2.63}  # 小腿，闭链结构不完整，仅作参考；自由增益拟合的 kp/kd 比例 0.77/0.63（07-K18）
+  RL_calf: {delay_ms: 12.0, inertia: 0.041, coulomb: 0.38, viscous: 0.000, gravity_g0: +0.036, gravity_g1: +2.45}  # 小腿，闭链结构不完整，仅作参考；自由增益拟合的 kp/kd 比例 0.91/0.77（07-K18）
+  RR_calf: {delay_ms: 12.0, inertia: 0.049, coulomb: 0.26, viscous: 0.053, gravity_g0: +0.048, gravity_g1: +2.08}  # 小腿，闭链结构不完整，仅作参考；自由增益拟合的 kp/kd 比例 0.78/0.59（07-K18）
+
+summary:
+  thigh_coulomb_nm: [0.22, 0.27]
+  calf_coulomb_nm: [0.28, 0.43]
+  note: MuJoCo 缺省 frictionloss 0.05、armature 0.01，与实测差 4–8 倍；训练的关节摩擦应改为实测
+validation:
+  ms8_exam_mean_q_dq_tau: {plain: [3.24 mrad, 0.054 rad/s, 0.145 N·m], nominal_gain_plus_delay: [3.43, 0.055, 0.121], ideal_sim_before: 见 07-K19}
+  pd_sweep_model_rmse_frthigh_mrad: 2.5   # 标称增益 + 实测惯量摩擦，30 个 kp/kd 组合
