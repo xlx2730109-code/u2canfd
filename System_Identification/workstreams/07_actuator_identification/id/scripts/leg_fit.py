@@ -12,8 +12,12 @@
 被动关节保持 MJCF 缺省。拟合数据：八关节同时多正弦 seed 1，加各关节的 tau_steps 与 chirp（伙伴关节的姿态取八关节数据的起点）；
 考试数据：八关节 seed 2、各关节的 multisine 与 ramp。
 
+零位偏差（07-T11）：--zero_offsets z1,...,z8（电机坐标，与 analyze_stair.py 同约定 q_sim = s*(q_m - z)）把全部命令、反馈、
+起点统一平移后再拟合，检验静态阶梯估计的零位偏差能否降低拟合代价；--out_name 另存结果，不覆盖 leg_fit.json。
+
 用法（GPU 环境）：
     python leg_fit.py --xml <bennett_3.xml> --data <id/data/raw/日期> --out <id/results> [--gens 150 --cands 512]
+        [--zero_offsets -0.20,0,-0.07,0,-0.24,0,-0.03,0 --out_name leg_fit_zero.json]
 """
 from __future__ import annotations
 
@@ -39,6 +43,7 @@ ROTOR = 0.0043                     # 折算转子惯量 kg·m²（Inertia 寄存
 TMAX = 12.0
 W_Q, W_DQ, W_T = 1 / 0.005 ** 2, 1 / 0.1 ** 2, 1 / 0.05 ** 2
 
+ZERO_M = np.zeros(8)               # 电机坐标零位偏差 z，由 --zero_offsets 设置
 PNAMES = ["delay_ms", "kp_s", "kd_s", "tau_off"] + [f"fric_{n}" for n in NAMES] + [f"visc_{n}" for n in NAMES] + [f"arm_{n}" for n in NAMES]
 LO = np.array([0.0, 0.7, 0.5, -0.08] + [0.0] * 8 + [0.0] * 8 + [0.0] * 8)
 HI = np.array([16.0, 1.3, 1.5, 0.02] + [0.8] * 8 + [0.3] * 8 + [0.06] * 8)
@@ -120,6 +125,10 @@ class Run:
         for a in (self.qd, self.qm, self.dqm, self.tm, self.ff):
             a *= S2M[None, :]
         self.q0_sim = S2M * q0m
+        shift = S2M * ZERO_M
+        for a in (self.qd, self.qm):
+            a -= shift[None, :]
+        self.q0_sim = self.q0_sim - shift
         self.skip = int(1.0 * self.rate)   # 前 1 s 保持阶段不计入
 
 
@@ -310,7 +319,14 @@ def main() -> int:
     ap.add_argument("--cands", type=int, default=240)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="cuda:0")
+    ap.add_argument("--zero_offsets", default=None, help="8 个电机坐标零位偏差，逗号分隔")
+    ap.add_argument("--out_name", default="leg_fit.json")
     args = ap.parse_args()
+    if args.zero_offsets:
+        global ZERO_M
+        ZERO_M = np.array([float(v) for v in args.zero_offsets.split(",")])
+        assert ZERO_M.shape == (8,), "--zero_offsets 需要 8 个值"
+        print("零位偏差（电机坐标）", ZERO_M.tolist())
     m = load_model(Path(args.xml))
     root = Path(args.data)
     fit_runs = build_runs(root, "fit")
@@ -348,7 +364,8 @@ def main() -> int:
            "exam_rmse_fit": {r.name: [float(np.sqrt(mse[0, i, 0]) * 1e3), float(np.sqrt(mse[0, i, 1])), float(np.sqrt(mse[0, i, 2]))] for i, r in enumerate(exam_runs)},
            "exam_rmse_baseline": {r.name: [float(np.sqrt(mse[1, i, 0]) * 1e3), float(np.sqrt(mse[1, i, 1])), float(np.sqrt(mse[1, i, 2]))] for i, r in enumerate(exam_runs)}}
     Path(args.out).mkdir(parents=True, exist_ok=True)
-    (Path(args.out) / "leg_fit.json").write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    res["zero_offsets_motor"] = ZERO_M.tolist()
+    (Path(args.out) / args.out_name).write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(json.dumps({k: res[k] for k in ("fit_cost", "fit_cost_baseline", "exam_cost", "exam_cost_baseline")}, ensure_ascii=False))
     for k, v in res["params"].items():
         print(f"  {k:14s} {v:9.4f}   (基线 {res['baseline'][k]:.4f})")

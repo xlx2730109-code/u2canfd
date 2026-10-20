@@ -1,0 +1,19 @@
+零位偏差（电机坐标） [-0.2, 0.0, -0.07, 0.0, -0.24, 0.0, -0.03, 0.0]
+拟合集 17 个运行，考试集 17 个运行；Tmax 21450
+基线（训练缺省模型）拟合集代价 656.2
+  gen    0 best 511.2 sigma 0.992 27s
+  gen   10 best 378.9 sigma 3.000 171s
+  gen   20 best 362.4 sigma 2.997 311s
+  gen   30 best 360.8 sigma 3.000 449s
+  gen   40 best 352.5 sigma 2.700 586s
+  gen   50 best 348.5 sigma 2.395 724s
+  gen   60 best 342.7 sigma 2.514 861s
+  gen   70 best 339.5 sigma 2.577 996s
+  gen   80 best 339.1 sigma 2.586 1130s
+  gen   90 best 336.7 sigma 2.135 1266s
+  gen  100 best 336 sigma 1.698 1399s
+  gen  110 best 335.8 sigma 1.157 1532s
+  gen  120 best 335.7 sigma 1.097 1662s
+  gen  130 best 335.7 sigma 0.991 1791s
+  gen  140 best 335.7 sigma 1.057 1921s
+  gen  150 best 335.7 sigma 1.016 2049s

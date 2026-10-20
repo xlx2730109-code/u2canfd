@@ -162,6 +162,7 @@ sim2real/
 ├── policies/                      已打包的策略，只含 exported/policy.pt 与 params/*.yaml，免去引用 bennett_rl
 │   ├── bennett_1_crawl_D4/        bennett_1 爬行，D4（滞后 0–5 步训练）
 │   ├── bennett_1_crawl_T9/        bennett_1 爬行，T9（缺省）
+│   ├── bennett_3_free_V5/         bennett_3（V5 执行器模型）自由步态，训练到第 1200 步（2026-10-20，策略哈希前 16 位 54e0b058846fe3d0），用 `bennett_1_free_deploy.py --policy policies/bennett_3_free_V5/exported/policy.pt`
 │   ├── bennett_1_free_S1/         bennett_1 自由步态，S1（缺省）
 │   ├── free_gait3/                free_gait3
 │   ├── go2-10/                    go2-10
@@ -174,7 +175,8 @@ sim2real/
 │   └── libusb-1.0.dll
 ├── tools/
 │   ├── 0_Return_to_zero.py        8 电机限速安全回零
-│   └── dev_sn.py                  列出 USB-CANFD 设备
+│   ├── dev_sn.py                  列出 USB-CANFD 设备
+│   └── start_detached.sh          Jetson 脱机启动：手柄桥与策略放后台，日志写本机，可拔 USB 数据线（sim2real-K36）
 ├── bennett_1_crawl_deploy.py      bennett_1 爬行变体入口（缺省 T9）
 ├── bennett_1_free_deploy.py       bennett_1 自由步态入口（缺省 S1）
 ├── quad_leg_free_gait3_deploy.py  自由步态 gait3 入口
@@ -293,10 +295,15 @@ sim2real/
 
 - **sim2real-K33**：手柄策略命令按用户截图合并为一个代码块，每行一个完整入口，涵盖 S1、T9、go2-10、trot1、free_gait3 和 free_gait4。来源：用户指定的布局与现有部署入口。
 
-- **sim2real-K34**：2026-10-20 部署核查（静态与 `--check_only`，未开 IMU 与电机）：`bennett_deploy/*.py` 编译通过；`bennett_1_crawl_deploy.py --check_only` 通过（500 Hz、`low_latency`、kp 28、kd 2）；用 Isaac 生成 `bennett_3` 的 `env.yaml` 后 `bennett_1_free_deploy.py --check_only` 通过，说明部署契约可读 `bennett_3` 训练结果，执行器模型改动（延迟、摩擦）只在训练端，部署代码无需改。尚未实现：部署端写电机看门狗 TIMEOUT、线程 CPU 占用审计（根 README 01-T25）。`bennett_3` 尚未训练，现无对应策略。
+- **sim2real-K34**：2026-10-20 部署核查（静态与 `--check_only`，未开 IMU 与电机）：`bennett_deploy/*.py` 编译通过；`bennett_1_crawl_deploy.py --check_only` 通过（500 Hz、`low_latency`、kp 28、kd 2）；用 Isaac 生成 `bennett_3` 的 `env.yaml` 后 `bennett_1_free_deploy.py --check_only` 通过，说明部署契约可读 `bennett_3` 训练结果，执行器模型改动（延迟、摩擦）只在训练端，部署代码无需改。`bennett_3` 尚未训练，现无对应策略。
+
+- **sim2real-K35**：2026-10-20 部署端新增：①电机看门狗，`--motor_watchdog_ms`（缺省 300，0 关闭）与 `--motor_watchdog_unit_us`（缺省 50），启动时写 `TIMEOUT` 并读回，退出时失能后写回，细节与局限见根 README 01-K98；②`main()` 设 `sys.setswitchinterval(0.0005)`；③退出的 `[TIMING]` 行增加 `cpu_ratio` 与线程名。线程审计：只有 IMU 读取与 CSV 写入两个线程，均带阻塞或 `sleep`，ROS2、键盘在主线程轮询。单元测试 16 项通过、1 项跳过。看门狗的使能状态写入、读回、退出写回已在 Jetson 零力矩验证（根 README 01-K98）；退出路径改为先 `shutdown_motors()`、最后 `bus.close()`，因 Jetson 上关闭 USB 设备时 libusb 会 abort；完整入口未在 Jetson 运行。
+
+- **sim2real-K36**：脱机运行（拔掉 USB 数据线后 SSH 不可用）：`tools/start_detached.sh <入口.py> <策略> [参数]`，环境变量 `DURATION_S`（缺省 60，从控制循环起算，到时自动退出并失能）、`TAG`；输出目录 `<总目录>/ground_logs/<时间>_<TAG>/` 含 `deploy.csv`（策略步日志）、`policy.log`、`teleop.log`、`meta.txt`。策略程序在非终端环境下自动关闭键盘（`input.py`），启动与操作靠手柄 START；脱机时终端 `q` 不可用，退出靠 `DURATION_S` 与电机看门狗。`bennett_3` 的导出策略 `exported/policy.pt` 用 `bennett_1_free_deploy.py` 的 `--check_only` 通过，`bennett_1_crawl_deploy.py` 因观测项不同被拒绝，属预期。脚本只做过语法检查，未在 Jetson 上运行。
 
 ## 已完成
 
+- [x] 2026-10-20 部署端加入电机看门狗、切换间隔与 CPU 占用诊断，审计线程（sim2real-K35）。
 - [x] 2026-10-20 核对 `README.md` 中关于 Linux 低延迟库与缺省采样率的过期表述，补充 aarch64 低延迟库与 500 Hz 缺省（sim2real-K6、K7、K34）。
 - [x] 2026-10-20 合并手柄策略命令代码块，补齐 GO2、trot 与两个旧自由步态入口；仅修改文档（sim2real-K33）。
 
@@ -353,7 +360,7 @@ sim2real/
 
 - [ ]  sim2real-T1：用户在真机上试 `bennett_1_crawl_deploy.py`（T9）与 `bennett_1_free_deploy.py`（S1），结果记入本节；首次上电按用户的流程，须当次明确同意。
 - [ ]  sim2real-T2：在 Linux（Jetson）上跑 `--check_only`、`--dry_run`，确认 `.so` 绑定、键盘、IMU 串口名（sim2real-K6）。
-- [ ]  sim2real-T8：部署端启动时写电机看门狗 TIMEOUT（约 300 ms）并在退出时恢复；审计 ROS2、IMU、日志线程有无占满 CPU 的循环（根 README 01-T25、07 号包）。需用户同意后改部署代码。
+- [ ]  sim2real-T8：在 `seeed` 环境跑完整入口 `--dry_run` 与零增益试验，核对退出时 `[TIMING] cpu_ratio` 和 libusb 1.0.29 下关闭设备是否仍 abort（sim2real-K35）。
 - [ ]  sim2real-T3：官方动态库下 T9 对约 109 ms 滞后不稳，真机若出现迟钝或摔倒，改用补丁版或 D4（sim2real-K5）。
 - [ ]  sim2real-T4：用户确认文件夹结构后，决定原位置文件是否删除。
 - [ ]  sim2real-T5：在另一台电脑上拷入整个 `sim2real/`，运行 `--check_only`，确认 Python 依赖与动态库齐全（sim2real-K8）。

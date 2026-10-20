@@ -818,8 +818,76 @@ class Go2MotorBus:
         for name in active_names:
             self.control.control_mit(self.motors[name], kp, kd, float(targets[name]), 0.0, 0.0)
 
+    RID_TIMEOUT = 9  # 电机看门狗：设定周期内收不到 CAN 控制帧则自动失能（状态码 D，锁存，需断电清除）
+
+    def arm_watchdog(self, timeout_ms: float, unit_us: float = 50.0) -> None:
+        """Write the motor-side watchdog (RAM only, lost on power-off) and verify it by readback.
+
+        The unit of TIMEOUT is inferred (about 50 us per count, 01-K95), so the real period is
+        between about 0.2x and 1x of timeout_ms. A motor that trips latches status D until power-cycled.
+        """
+        if timeout_ms < 50.0:
+            raise ValueError("motor watchdog below 50 ms would trip on ordinary host stalls")
+        raw = round(timeout_ms * 1000.0 / unit_us)
+        if not 1 <= raw < 2**31:
+            raise ValueError(f"watchdog raw value {raw} out of range")
+        originals = {}
+        for name, motor in self.motors.items():
+            value = self.control.read_motor_param(motor, self.RID_TIMEOUT, timeout=1.0)
+            if value is None:
+                raise RuntimeError(f"cannot read TIMEOUT register of {name}")
+            originals[name] = int(value)
+        self._watchdog_originals = originals
+        # 先连续写完 8 台，再边回读边发零增益阻尼帧保活，避免先写的电机在回读期间等不到帧而触发
+        for motor in self.motors.values():
+            self.control.write_motor_param(motor, self.RID_TIMEOUT, int(raw).to_bytes(4, "little"))
+        for _ in range(2):  # 等写应答到齐，避免回读读到写应答
+            self._keepalive()
+            time.sleep(0.01)
+        for name, motor in self.motors.items():
+            self._keepalive()
+            back = self.control.read_motor_param(motor, self.RID_TIMEOUT, timeout=1.0)
+            if back is None or int(back) != raw:
+                raise RuntimeError(f"TIMEOUT readback of {name} is {back}, expected {raw}")
+        self._keepalive()
+        print(
+            f"[WATCHDOG] TIMEOUT {sorted(set(originals.values()))} -> {raw} counts "
+            f"(nominal {timeout_ms:.0f} ms at {unit_us:g} us/count)",
+            file=sys.stderr,
+        )
+
+    def _keepalive(self) -> None:
+        for motor in self.motors.values():
+            self.control.control_mit(motor, 0.0, 1.5, 0.0, 0.0, 0.0)
+
+    def restore_watchdog(self) -> None:
+        originals = getattr(self, "_watchdog_originals", None)
+        if not originals:
+            return
+        self._watchdog_originals = None
+        failed = []
+        for name, value in originals.items():
+            try:
+                self.control.write_motor_param(self.motors[name], self.RID_TIMEOUT, int(value).to_bytes(4, "little"))
+                time.sleep(0.002)
+            except Exception as exc:
+                failed.append(f"{name}: {exc}")
+        if failed:
+            print("[WATCHDOG] restore failed (power-cycle clears it): " + "; ".join(failed), file=sys.stderr)
+        else:
+            print(f"[WATCHDOG] TIMEOUT restored to {sorted(set(originals.values()))}", file=sys.stderr)
+
     def disable(self) -> None:
         self.control.disable_all()
 
+    def shutdown_motors(self) -> None:
+        """Disable all motors, then restore the watchdog (order matters: restoring first would leave enabled motors unguarded)."""
+        try:
+            self.control.disable_all()
+        except Exception as exc:
+            print(f"[WATCHDOG] disable before restore failed: {exc}", file=sys.stderr)
+        self.restore_watchdog()
+
     def close(self) -> None:
+        self.shutdown_motors()
         self.control.close()

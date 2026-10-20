@@ -167,6 +167,64 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class MotorWatchdogTests(unittest.TestCase):
+    class FakeControl:
+        def __init__(self, initial=0, stuck=False):
+            self.regs = {1: initial, 2: initial}
+            self.stuck = stuck
+            self.mit_frames = 0
+            self.disabled = 0
+
+        def read_motor_param(self, motor, rid, timeout=1.0):
+            return self.regs[motor]
+
+        def write_motor_param(self, motor, rid, data):
+            if not self.stuck:
+                self.regs[motor] = int.from_bytes(data, "little")
+
+        def control_mit(self, motor, kp, kd, q, dq, tau):
+            self.mit_frames += 1
+
+        def disable_all(self):
+            self.disabled += 1
+
+        def close(self):
+            pass
+
+    def make_bus(self, **kwargs):
+        from .dm_can import Go2MotorBus
+
+        bus = Go2MotorBus.__new__(Go2MotorBus)
+        bus.control = self.FakeControl(**kwargs)
+        bus.motors = {"a": 1, "b": 2}
+        return bus
+
+    def test_arm_verify_and_restore(self) -> None:
+        bus = self.make_bus(initial=0)
+        bus.arm_watchdog(300.0, 50.0)
+        self.assertEqual(bus.control.regs, {1: 6000, 2: 6000})
+        self.assertGreater(bus.control.mit_frames, 0)
+        bus.close()
+        self.assertEqual(bus.control.regs, {1: 0, 2: 0})
+        self.assertGreaterEqual(bus.control.disabled, 1)
+
+    def test_readback_mismatch_raises_and_close_restores(self) -> None:
+        bus = self.make_bus(initial=7, stuck=True)
+        with self.assertRaises(RuntimeError):
+            bus.arm_watchdog(300.0, 50.0)
+        bus.close()
+        self.assertEqual(bus.control.regs, {1: 7, 2: 7})
+
+    def test_too_short_timeout_rejected(self) -> None:
+        bus = self.make_bus()
+        with self.assertRaises(ValueError):
+            bus.arm_watchdog(20.0, 50.0)
+
+    def test_parser_default(self) -> None:
+        args = build_parser().parse_args([])
+        self.assertEqual(args.motor_watchdog_ms, 300.0)
+
+
 class PosixKeyParserTests(unittest.TestCase):
     def test_plain_keys_and_arm(self) -> None:
         from .input import parse_posix_keys

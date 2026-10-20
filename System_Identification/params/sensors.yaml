@@ -1,0 +1,40 @@
+# 传感器参数（工作包 08 与 01）。版本 v1，生成 2026-10-20。
+# 来源：08-K1 至 08-K3（IMU 静态 120 s，`08_sensor_identification/data/raw/2026-10-20/imu_static_001/summary.json`）；
+#       01-K69（关节反馈分辨率与静止噪声，`01_communication/.../20261019_*_r21` 零力矩数据）。
+# 条件：Jetson，机器人悬空静止，电机失能；IMU 原始输出（未滤波）；电池未使用。
+# 置信度：中。只覆盖静止噪声；行走时的振动、冲击、安装姿态误差未测（08-T1），待落地日志（`ground_logs` 的 `deploy.csv`）补充。
+version: 1
+date: 2026-10-20
+confidence: 中
+
+imu:
+  model: DM-IMU（BMI088）
+  rate_hz: 1000
+  gyro_bias_rad_s: [0.0004, -0.0075, 0.0003]          # 静止 120 s 均值；y 轴偏置较大
+  gyro_noise_std_rad_s: [0.0062, 0.0283, 0.0044]      # 原始，未滤波；y 轴约为 x、z 的 5 倍（08-K2，原因未定）
+  gyro_noise_std_after_12hz_lowpass_rad_s: 0.0055     # y 轴，部署的 12 Hz 低通之后（08-K2 估计）
+  accel_noise_std_m_s2: [0.0258, 0.0279, 0.0270]
+  accel_norm_mean_m_s2: 9.805
+  euler_deg_mean: [-1.226, -0.307, 60.9]              # 悬空姿态，不等于安装误差（08-K1）
+  allan_dev_10s_rad_s: {x: 0.00015, y: 0.00062, z: 0.00005}
+
+joint_encoder:                                         # 01-K69
+  position_resolution_rad: 0.00038                    # 16 位
+  velocity_resolution_rad_s: 0.022                    # 12 位
+  torque_resolution_nm: 0.0098                        # 12 位
+  static_noise_std: {position_rad: 0.00018, velocity_rad_s: 0.015, torque_nm: 0.005}   # 位置噪声小于量化步长
+  torque_feedback_offset_nm: -0.035                   # 8 台一致（07-K16）
+
+training_observation_noise_current:                    # bennett_3 的 env.yaml（均匀分布 ±）
+  base_ang_vel_rad_s: 0.2
+  projected_gravity: 0.05
+  joint_pos_rad: 0.01
+  joint_vel_rad_s: 1.5
+
+assessment:                                            # 比较的是静止噪声，不是行走时的真实误差
+  gyro_training_over_measured: 7                       # 0.2 对 0.028（y 轴最大值）
+  joint_pos_training_over_measured: 26                 # 0.01 对 0.00038（一个量化步长）
+  joint_vel_training_over_measured: 68                 # 1.5 对 0.022
+  conclusion: 训练里的观测噪声比静止实测大一到两个数量级，偏保守，不需要放宽；是否过大使策略对真实信号不敏感，要看落地日志
+  not_measured: [行走时的 IMU 振动与冲击, 安装姿态误差（08-T1）, 关节速度在低通后的实际噪声, 温漂]
+  next: 落地日志（`sim2real/tools/start_detached.sh`）中的 base_ang_vel、projected_gravity 与关节速度，与仿真同工况的分布对比后再定是否收紧

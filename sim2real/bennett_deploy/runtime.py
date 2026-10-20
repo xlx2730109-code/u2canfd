@@ -174,6 +174,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DM_SDK_PROFILE,
         help="DM SDK profile (default: low_latency on Windows and Jetson aarch64, original on x86-64 Linux); original = vendor library, feedback ~110-120 ms batches",
     )
+    parser.add_argument(
+        "--motor_watchdog_ms",
+        type=float,
+        default=300.0,
+        help="Motor-side watchdog written at startup and restored on exit; motors disable themselves if no CAN frame arrives for this long (>= 50, 0 disables)",
+    )
+    parser.add_argument("--motor_watchdog_unit_us", type=float, default=50.0, help="TIMEOUT register count unit in microseconds (inferred, 01-K95)")
     parser.add_argument("--imu_port", default=DEFAULT_IMU_PORT)
     parser.add_argument("--imu_baudrate", type=int, default=921600)
     parser.add_argument(
@@ -414,6 +421,8 @@ class DeploymentRunner:
         self.dm_sdk_dir, self.dm_sdk_sha256 = _verify_dm_sdk_profile(args.dm_sdk_profile)
         self.windows_timer_period = _WindowsTimerPeriod(1)
         self.control_overruns = 0
+        self._wall0 = time.perf_counter()
+        self._cpu0 = time.process_time()
         self.max_control_late_s = 0.0
 
     def print_contract(self) -> None:
@@ -686,6 +695,10 @@ class DeploymentRunner:
 
         assert self.imu is not None
         self.bus = Go2MotorBus(self.contract.joint_specs)
+        if self.args.motor_watchdog_ms > 0.0:
+            self.bus.arm_watchdog(self.args.motor_watchdog_ms, self.args.motor_watchdog_unit_us)
+        else:
+            print("[WATCHDOG] disabled: a crash or USB loss leaves the motors on their last command", file=sys.stderr)
         self.bus.wait_fresh_feedback(timeout_s=1.0)
         first_snapshot = self.bus.snapshot()
         configured_zero = _parse_values(self.args.motor_zero_positions, 8, "--motor_zero_positions")
@@ -910,9 +923,9 @@ class DeploymentRunner:
             self.ros_command.close()
         if self.bus is not None:
             try:
-                self.bus.close()
+                self.bus.shutdown_motors()  # 先失能并写回看门狗；USB 设备最后再关（Jetson 上关闭设备时 libusb 可能 abort）
             except Exception as exc:
-                errors.append(f"motor close: {exc}")
+                errors.append(f"motor shutdown: {exc}")
         if self.imu is not None:
             try:
                 print("[IMU] final diagnostics=" + str(self.imu.diagnostics()), file=sys.stderr)
@@ -929,15 +942,26 @@ class DeploymentRunner:
         except Exception as exc:
             errors.append(f"timer close: {exc}")
         print(
-            f"[TIMING] control_overruns={self.control_overruns} max_late_ms={self.max_control_late_s*1000.0:.3f}",
+            f"[TIMING] control_overruns={self.control_overruns} max_late_ms={self.max_control_late_s*1000.0:.3f} "
+            f"cpu_ratio={(time.process_time() - self._cpu0) / max(1e-9, time.perf_counter() - self._wall0):.2f} "
+            f"threads={[t.name for t in threading.enumerate()]}",
             file=sys.stderr,
         )
         if errors:
             print("[CLOSE] " + "; ".join(errors), file=sys.stderr)
+        sys.stderr.flush()
+        if self.bus is not None:
+            try:
+                self.bus.close()
+            except Exception as exc:
+                print(f"[CLOSE] motor close: {exc}", file=sys.stderr)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # 解释器默认 5 ms 才切换线程；若有线程长时间占用 GIL，发令环会被拖慢（实测 1 kHz 环降到 24 Hz，01-K97）。
+    # 切换间隔缩到 0.5 ms 可把最坏情况拉回约 186 Hz；正常情况下无影响。
+    sys.setswitchinterval(0.0005)
     runner = None
     stop_event = threading.Event()
 
