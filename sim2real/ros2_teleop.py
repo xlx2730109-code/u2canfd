@@ -22,7 +22,7 @@ def main(argv=None) -> int:
     parser.add_argument("--timeout", type=float, default=0.25)
     parser.add_argument("--deadman-button", type=int, default=4)
     parser.add_argument("--stop-button", type=int, default=2)
-    parser.add_argument("--axes", type=int, nargs=3, default=(4, 3, 0), metavar=("VX", "VY", "WZ"))
+    parser.add_argument("--axes", type=int, nargs=3, default=(3, 4, 0), metavar=("VX", "VY", "WZ"))
     parser.add_argument("--scales", type=float, nargs=3, default=(0.25, 0.12, 0.5), metavar=("VX", "VY", "WZ"))
     parser.add_argument("--deadzone", type=float, default=0.05)
     args, ros_args = parser.parse_known_args(argv)
