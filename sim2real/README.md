@@ -18,19 +18,19 @@ cd ~/workspaces/bennett_onboard/u2canfd
 
 #### 2. ROS 2 手柄运行
 
-终端一启动手柄和比例映射命令桥：
+终端一：启动手柄和命令桥。
 
 ```bash
 bash sim2real/start_ros2_teleop.sh
 ```
 
-终端二启动自由步态 S1：
+终端二：运行自由步态 S1。
 
 ```bash
 ../policy_python.sh sim2real/bennett_1_free_deploy.py --ros2
 ```
 
-要运行爬行 T9，终端二改用以下命令，两条策略命令只运行一条：
+终端二：运行爬行 T9。
 
 ```bash
 ../policy_python.sh sim2real/bennett_1_crawl_deploy.py --ros2
@@ -289,7 +289,11 @@ sim2real/
 
 - **sim2real-K31**：A 节命令已按现有 Jetson 总目录统一为 `../policy_python.sh`，优先展示 S1 手柄运行，保留 T9、键盘和新策略用法；静默测试模板已移出运行说明。来源：Jetson `policy_python.sh` 与用户指定的文档调整。
 
+- **sim2real-K32**：手柄运行按终端和策略逐项列出完整命令，不再使用“改用以下命令”的表述。来源：用户指定的文档格式调整。
+
 ## 已完成
+
+- [x] 2026-10-20 将 S1、T9 的手柄命令统一为直接标注终端、策略和完整命令的格式（sim2real-K32）。
 
 - [x] 2026-10-20 将 A 节整理为 Jetson 的目录、手柄、键盘、新策略与拉取命令；补充稀疏检出造成的两端目录差异，未运行硬件命令（sim2real-K31）。
 
