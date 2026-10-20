@@ -26,6 +26,22 @@ python sim2real/quad_leg_free_gait3_deploy.py --keyboard
 python sim2real/bennett_1_crawl_deploy.py --keyboard --dm_sdk_profile low_latency
 ```
 
+ROS 2 手柄运行用两个终端。Jetson 的终端一启动手柄、`wheeltec_joy` 和命令桥：
+
+```bash
+bash sim2real/start_ros2_teleop.sh
+```
+
+终端二启动策略；Jetson 使用已配好的 `policy_python.sh`，已有正确环境时可用 `python`：
+
+```bash
+../policy_python.sh sim2real/bennett_1_crawl_deploy.py --ros2
+```
+
+程序仍会先使能电机并回默认姿态。准备完成后在策略终端按空格或 Enter 开始策略，按住手柄 `buttons[4]` 才接收速度，松开则速度归零；`buttons[2]` 请求退出策略，`q` 也可退出。两个按钮索引均可在桥接启动命令中配置，物理键位须按当前手柄确认。软件停止不是硬件急停。
+
+链路为 `/joy → wheeltec_joy → /cmd_vel → bennett_cmd_bridge → 本机 UDP → 策略程序 → 电机`。ROS 2 使用系统 Python，策略继续使用自己的 Python 环境；策略进程按入口的速度范围限幅，未收到新鲜命令时归零，默认超时 0.25 s。`--ros2` 与 `--keyboard` 二选一；ROS 模式仍保留终端空格授权和 `q` 退出。
+
 入口脚本：
 
 | 入口 | 策略 |
@@ -71,6 +87,7 @@ sim2real/
 │   ├── input.py                   键盘速度指令（Windows 用 msvcrt，Linux 用 termios）
 │   ├── paths.py                   路径解析：打包的策略优先，其次训练仓库
 │   ├── policy.py                  50 维观测拼装与策略推理
+│   ├── ros_command.py             ROS 本机速度接收、限幅、超时与手柄使能门控
 │   ├── runtime.py                 主程序：参数、安全启动、1 kHz 控制环、50 Hz 策略
 │   ├── tests.py                   部署核心单元测试
 │   ├── trot1_contract.py          trot1 契约
@@ -99,7 +116,9 @@ sim2real/
 ├── quad_leg_free_gait4_deploy.py  自由步态 gait4 入口
 ├── quad_leg_go2-10_deploy.py      go2-10 入口（缺省策略）
 ├── quad_leg_trot1_deploy.py       trot1 入口
-└── README.md                      本文件
+├── README.md                      本文件
+├── ros2_teleop.py                 ROS 2 手柄速度桥，可同时启动现有手柄节点
+└── start_ros2_teleop.sh           加载 Jetson ROS 环境并启动手柄链路
 ```
 
 ### C. 迁移对照
@@ -159,7 +178,11 @@ sim2real/
 - sim2real-K7：`dm_sdk_profile` 缺省：Windows 为 `low_latency`，Linux 为 `original`（2026-10-19 起；此前缺省 `original`）；补丁版的反馈时龄见根 README 01-K27。
 - sim2real-K8：把训练仓库藏起来（`BENNETT_RL_ROOT` 指向不存在的目录）后，6 个入口的 `--check_only` 与单元测试照常通过，契约指纹与此前一致，说明运行不依赖 `bennett_rl`；未在另一台电脑上验证，那里还需要 Python 环境与依赖。
 
+- **sim2real-K9**：`--ros2` 从本机 `127.0.0.1:19761` 接收速度，策略进程按入口范围限幅；ROS 桥要求新鲜 `/joy`、按住使能键和新鲜 `/cmd_vel`，默认 0.25 s 超时归零；停止请求锁存并让策略退出。来源：`ros_command.py`、`ros2_teleop.py` 与无电机验证。失联归零针对 ROS/进程消息中断，不等于无线接收器能检测所有无线断连。
+
 ## 已完成
+
+- [x] 2026-10-20 增加 `--ros2` 输入、ROS 速度桥和启动脚本；通过限幅、松键、超时、无效报文与 UDP 到运行库的无电机验证（sim2real-K9）。
 
 - [X]  2026-10-16 建 `sim2real/`，复制部署运行库、入口、动态库、工具与文档，改动动态库路径并验证（sim2real-K1）。
 - [X]  2026-10-17 写死的 `E:\` 路径改为跨平台解析；加 Linux 键盘与 `.so` 绑定；放宽契约校验（见 D）。

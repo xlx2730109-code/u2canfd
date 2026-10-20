@@ -22,6 +22,7 @@ from .imu import DMImuSerialReader, FirstOrderLowPass, projected_gravity_from_rp
 from .input import KeyboardCommandVelocity
 from .paths import resolve_policy
 from .policy import PolicyPipeline
+from .ros_command import RosArmKeyboard, RosCommandReceiver
 
 
 DEFAULT_POLICY = resolve_policy(
@@ -194,7 +195,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--command_x", type=float, default=None)
     parser.add_argument("--command_y", type=float, default=0.0)
     parser.add_argument("--command_yaw", type=float, default=0.0)
-    parser.add_argument("--keyboard", action="store_true")
+    command_modes = parser.add_mutually_exclusive_group()
+    command_modes.add_argument("--keyboard", action="store_true")
+    command_modes.add_argument("--ros2", action="store_true", help="Local ROS bridge velocity; Enter/Space arms, q exits")
+    parser.add_argument("--ros2_port", type=int, default=19761)
+    parser.add_argument("--ros2_timeout_s", type=float, default=0.25)
     parser.add_argument("--auto_arm", action="store_true")
     parser.add_argument("--keyboard_step_x", type=float, default=0.02)
     parser.add_argument(
@@ -275,6 +280,14 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("filter cutoffs must be >= 0")
     if args.log_csv_every < 1:
         raise ValueError("--log_csv_every must be >= 1")
+    if not math.isfinite(args.ros2_timeout_s) or args.ros2_timeout_s <= 0:
+        raise ValueError("--ros2_timeout_s must be finite and positive")
+    if not 1 <= args.ros2_port <= 65535:
+        raise ValueError("--ros2_port must be between 1 and 65535")
+    if args.ros2 and (args.auto_arm or args.diag_sequence):
+        raise ValueError("--ros2 requires manual keyboard arming and cannot use --diag_sequence")
+    if args.ros2 and (args.command_x not in (None, 0.0) or args.command_y != 0.0 or args.command_yaw != 0.0):
+        raise ValueError("--ros2 accepts velocity only from the bridge")
 
 
 class ImuObservationSource:
@@ -366,11 +379,13 @@ class DeploymentRunner:
         self.active_names = (
             contract.joint_order if args.active_joints == "all" else ("RR_thigh", "RR_calf")
         )
-        initial_x = 0.0 if args.keyboard and args.command_x is None else (0.10 if args.command_x is None else args.command_x)
+        initial_x = 0.0 if (args.keyboard or args.ros2) and args.command_x is None else (0.10 if args.command_x is None else args.command_x)
         self.command = [float(initial_x), float(args.command_y), float(args.command_yaw)]
+        self.ros_command: RosCommandReceiver | None = None
         self.keyboard = None
-        if args.keyboard:
-            self.keyboard = KeyboardCommandVelocity(
+        if args.keyboard or args.ros2:
+            keyboard_class = RosArmKeyboard if args.ros2 else KeyboardCommandVelocity
+            self.keyboard = keyboard_class(
                 stop_event=stop_event,
                 initial_x=self.command[0],
                 initial_y=self.command[1],
@@ -478,7 +493,14 @@ class DeploymentRunner:
 
     def _poll_command(self) -> None:
         if self.keyboard is not None:
-            self.command[:] = self.keyboard.poll()
+            keyboard_command = self.keyboard.poll()
+            if not self.args.ros2:
+                self.command[:] = keyboard_command
+        if self.ros_command is not None:
+            state = self.ros_command.poll()
+            self.command[:] = state.command
+            if state.stop_requested:
+                self.stop_event.set()
 
     def _diag_command(self, policy_elapsed_s: float) -> str:
         if not self.args.diag_sequence:
@@ -714,6 +736,10 @@ class DeploymentRunner:
             elapsed = now - start
             if self.args.duration_s > 0.0 and elapsed >= self.args.duration_s:
                 break
+            if self.args.ros2:
+                self._poll_command()
+                if self.stop_event.is_set():
+                    break
             loop_count += 1
             snapshot = self.bus.snapshot(now)
             _, rel_pos, sim_vel = self._feedback_to_policy(snapshot, self.motor_zero)
@@ -771,6 +797,8 @@ class DeploymentRunner:
                 assert policy_start is not None
                 policy_elapsed = now - policy_start
                 diag_stage = self._diag_command(policy_elapsed)
+                if self.stop_event.is_set():
+                    break
                 imu_terms = self.imu.sample()
                 joint_vel_obs = joint_velocity_filter.update(sim_vel)
                 step = self.pipeline.infer(
@@ -835,6 +863,13 @@ class DeploymentRunner:
         if self.args.check_only:
             print("[CHECK-ONLY] contract and TorchScript validation passed; IMU and motors were not opened")
             return
+        if self.args.ros2:
+            self.ros_command = RosCommandReceiver(
+                port=self.args.ros2_port, timeout_s=self.args.ros2_timeout_s,
+                minimum=(self.args.keyboard_min_x, self.args.keyboard_min_y, self.args.keyboard_min_yaw),
+                maximum=(self.args.keyboard_max_x, self.args.keyboard_max_y, self.args.keyboard_max_yaw),
+            )
+            print(f"[ROS2] listening on 127.0.0.1:{self.args.ros2_port}; Enter/Space arms, q exits; stale/disabled velocity=zero")
         self.imu = ImuObservationSource(self.args, self.pipeline.policy_dt)
         print("[IMU] diagnostics=" + str(self.imu.diagnostics()))
         if self.args.dry_run:
@@ -847,6 +882,8 @@ class DeploymentRunner:
         errors = []
         if self.keyboard is not None:
             self.keyboard.close()
+        if self.ros_command is not None:
+            self.ros_command.close()
         if self.bus is not None:
             try:
                 self.bus.close()
