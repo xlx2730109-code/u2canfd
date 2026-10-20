@@ -26,8 +26,8 @@
 | 项 | 仿真（Trot1 env.yaml） | 真机/部署代码 | 状态 |
 |---|---|---|---|
 | 执行器 | `DCMotor`，kp28/kd2，effort 8，saturation 20，velocity 20，无延迟，armature/friction 空 | MIT 命令 `kp·Δq+kd·Δv+τff`，固件限幅 TMAX=20；`--software_effort_limit_nm` 默认 0（关闭） | 待辨识 |
-| 关节速度/IMU 滤波 | 训练里未见 | 部署端 12 Hz 一阶低通 | 待核对 |
-| 命令/反馈周期 | 50 Hz 策略，无反馈延迟 | 1 kHz 命令；官方 DLL 反馈约 109 ms 一批；Windows 有低延迟补丁，Linux 未补 | 见 02 |
+| 关节速度/IMU 滤波 | `bennett_1_*` 训练有 12 Hz 低通；`go2-10`、`trot1`、`free_gait3` 训练里没有 | 部署端缺省 12 Hz 一阶低通 | `bennett_1` 一致；旧策略失配但保持（真机迁移良好），已加启动提示，见根 README 01-K53、01-K76 |
+| 命令/反馈周期 | 50 Hz 策略，无反馈延迟 | 1 kHz 命令；官方库反馈约每 110–120 ms 一批（时龄均值约 50 ms）；Windows 补丁库时龄均值约 7 ms，0.5 ms 试验库约 0.6 ms；Linux 未补丁约 49 ms（DeepSeek 实测） | 见根 README 01 |
 | 关节符号 `sim_to_motor` | — | `3_quad_leg_track.py`：FL/RL_thigh=-1（实机验证）；`bennett_deploy/contract.py`：+1 | **冲突，需统一** |
 | 零位 | SW 约束的关节角 | 肉眼判断零位后设置，`--motor_zero_positions` 默认全 0 | 见 03 |
 | 通信超时 | — | 电机寄存器 `TIMEOUT=0`（无看门狗） | 见 01 |

@@ -100,8 +100,15 @@ elif sys.platform == "linux":
     # 按 CPU 架构选库：x86-64 用 dlls/，aarch64（Jetson）用 dlls_linux_aarch64/。
     # aarch64 版需要 libusb >= 1.0.27（含 libusb_init_context），系统自带 1.0.25 不够，
     # 在装有 libusb 1.0.29 的 conda/mamba 环境里运行（上面的 CONDA_PREFIX 预加载会生效）。
-    _dm_so_dir = "dlls_linux_aarch64" if platform.machine().lower() in ("aarch64", "arm64") else "dlls"
-    _dm_so_path = _SDK_DIR / _dm_so_dir / "libdm_device.so"
+    # BENNETT_DM_SDK_PROFILE：original（缺省）或 low_latency（仅 aarch64，睡眠常量 0.5 ms 的副本）。
+    _dm_linux_profile = os.environ.get("BENNETT_DM_SDK_PROFILE", "original").strip().lower()
+    if platform.machine().lower() in ("aarch64", "arm64"):
+        _dm_linux_dirs = {"original": "dlls_linux_aarch64", "low_latency": "dlls_linux_aarch64_lowlatency"}
+    else:
+        _dm_linux_dirs = {"original": "dlls"}
+    if _dm_linux_profile not in _dm_linux_dirs:
+        raise ValueError(f"invalid BENNETT_DM_SDK_PROFILE={_dm_linux_profile!r}; expected one of {tuple(_dm_linux_dirs)}")
+    _dm_so_path = _SDK_DIR / _dm_linux_dirs[_dm_linux_profile] / "libdm_device.so"
     if not _dm_so_path.is_file():
         raise FileNotFoundError(f"dmcan shared library not found: {_dm_so_path}")
     _dmcan_context_module = importlib.import_module("dmcan.dmcan_context")

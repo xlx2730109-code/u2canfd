@@ -1,0 +1,59 @@
+{
+  "run_id": "20261020_080208_powered_zt1000hz_linux_so_r11",
+  "t_start_ns": 1345297452840,
+  "t_end_ns": 1375297511631,
+  "t_mono0_ns": 1345297442760,
+  "t_wall0_ns": 1792454530072308717,
+  "rate_hz": 1000.0,
+  "seconds": 30.0,
+  "cycles": 30000,
+  "tx_frames": 240000,
+  "tx_fail": 0,
+  "policy": null,
+  "policy_hz": null,
+  "policy_ticks": 0,
+  "resources_every_5s": [
+    [
+      5.0,
+      44.0,
+      77.5
+    ],
+    [
+      10.0,
+      61.8,
+      78.6
+    ],
+    [
+      15.0,
+      78.9,
+      78.0
+    ],
+    [
+      20.0,
+      96.1,
+      79.0
+    ],
+    [
+      25.0,
+      113.1,
+      77.8
+    ]
+  ],
+  "priority": "normal",
+  "tail_s": 0.3,
+  "rx_frames_total": 240000,
+  "lite": false,
+  "process_cpu_s": 23.583,
+  "cpu_over_wall": 0.786,
+  "passive_frames_before_tx": 0,
+  "initial_status": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0
+  }
+}

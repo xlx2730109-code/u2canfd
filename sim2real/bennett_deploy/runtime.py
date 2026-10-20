@@ -5,6 +5,7 @@ import ctypes
 import hashlib
 import math
 import os
+import platform
 import signal
 import sys
 import threading
@@ -30,13 +31,27 @@ DEFAULT_POLICY = resolve_policy(
 DEFAULT_IMU_PORT = "COM6" if sys.platform == "win32" else "/dev/ttyACM0"
 
 DM_SDK_PROFILE_ENV = "BENNETT_DM_SDK_PROFILE"
-DM_SDK_PROFILES = {
-    "original": ("dlls", "DB7FC43D0D60B847479DCB58CFBE13E524B0CA43C5DFA847D14E760BC0E2A8A7"),
-    "low_latency": (
-        "dlls_lowlatency",
-        "252FAEFDC70F1C52D61F93E74E29B07F871F00230E75985D03CAE7C43B4AF15E",
-    ),
-}
+if sys.platform == "win32":
+    DM_SDK_PROFILES = {
+        "original": ("dlls", "DB7FC43D0D60B847479DCB58CFBE13E524B0CA43C5DFA847D14E760BC0E2A8A7"),
+        "low_latency": (
+            "dlls_lowlatency",
+            "252FAEFDC70F1C52D61F93E74E29B07F871F00230E75985D03CAE7C43B4AF15E",
+        ),
+    }
+elif platform.machine().lower() in ("aarch64", "arm64"):
+    # Jetson：low_latency 是把官方 .so 偏移 0x123B8 的睡眠常量由 100 ms 改为 0.5 ms 的副本（见 B_motor_comm/patches/PATCH.md）
+    DM_SDK_PROFILES = {
+        "original": ("dlls_linux_aarch64", "4A73C8EC7D64342F0D0A1156D5102F519C5F176FB23696740F254FE6492C3F2A"),
+        "low_latency": (
+            "dlls_linux_aarch64_lowlatency",
+            "DA573E3B874BBFBEE974323068C36B5CC5FBD14FA91F51E1EF1ED4115F530FEB",
+        ),
+    }
+else:
+    DM_SDK_PROFILES = {
+        "original": ("dlls", "6FF5CEA271F65D9C89A6A3EFFB51C923DBFE859461EC6400EE3F5852A52DDB76"),
+    }
 # 缺省库：Windows 用补丁库 low_latency（官方库反馈约每 110–120 ms 一批，时龄均值约 50 ms；见根 README 01-K26、01-K27）；
 # Linux 只有官方库。原来的缺省是 original，不带参数启动会走最慢的那条路。
 DEFAULT_DM_SDK_PROFILE = "low_latency" if sys.platform == "win32" else "original"
@@ -44,13 +59,19 @@ DEFAULT_DM_SDK_PROFILE = "low_latency" if sys.platform == "win32" else "original
 
 def _verify_dm_sdk_profile(profile: str) -> tuple[Path | None, str | None]:
     """Resolve and verify the selected Windows SDK without opening USB/CAN."""
-    if sys.platform != "win32":
-        if profile != "original":
-            raise RuntimeError(f"DM SDK profile {profile!r} has no Linux build; use --dm_sdk_profile original")
-        return None, None
+    if profile not in DM_SDK_PROFILES:
+        raise RuntimeError(f"DM SDK profile {profile!r} has no build for this platform; choose one of {tuple(DM_SDK_PROFILES)}")
     directory_name, expected_sha256 = DM_SDK_PROFILES[profile]
     root_dir = Path(__file__).resolve().parents[1] / "sdk"  # 动态库放在 sim2real/sdk
     dll_dir = root_dir / directory_name
+    if sys.platform != "win32":
+        so_path = dll_dir / "libdm_device.so"
+        if not so_path.is_file():
+            raise FileNotFoundError(f"DM SDK profile {profile!r}: {so_path} not found")
+        actual = hashlib.sha256(so_path.read_bytes()).hexdigest().upper()
+        if actual != expected_sha256:
+            raise RuntimeError(f"DM SDK profile {profile!r} hash mismatch: expected={expected_sha256} actual={actual} path={so_path}")
+        return dll_dir, actual
     dm_dll = dll_dir / "libdm_device.dll"
     required = (
         "libwinpthread-1.dll",
