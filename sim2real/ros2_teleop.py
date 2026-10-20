@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import signal
 import socket
@@ -21,14 +22,16 @@ def main(argv=None) -> int:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--timeout", type=float, default=0.25)
     parser.add_argument("--deadman-button", type=int, default=4)
-    parser.add_argument("--stop-button", type=int, default=2)
+    parser.add_argument("--pause-button", type=int, default=1)
+    parser.add_argument("--start-button", type=int, default=9)
+    parser.add_argument("--start-hold", type=float, default=1.0)
     parser.add_argument("--axes", type=int, nargs=3, default=(3, 2, 0), metavar=("VX", "VY", "WZ"))
     parser.add_argument("--scales", type=float, nargs=3, default=(0.25, 0.12, 0.5), metavar=("VX", "VY", "WZ"))
     parser.add_argument("--centers", type=float, nargs=3, default=(0.0, 0.403943, 0.0), metavar=("VX", "VY", "WZ"),
                         help="Raw neutral readings for this TGZ controller; recalibrate when replacing it")
     parser.add_argument("--deadzone", type=float, default=0.05)
     args, ros_args = parser.parse_known_args(argv)
-    gate = TeleopGate(args.timeout, args.deadman_button, args.stop_button)
+    gate = TeleopGate(args.timeout, args.deadman_button, args.pause_button, args.start_button, args.start_hold)
     mapper = JoystickVelocity(args.axes, args.scales, args.deadzone, args.centers)
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
@@ -51,9 +54,12 @@ def main(argv=None) -> int:
         publisher = None if args.bridge_only else node.create_publisher(Twist, args.topic, 1)
 
         def joy_callback(message):
-            gate.update_joy(message.buttons)
+            command = mapper.command(message.axes)
+            neutral = (len(message.axes) > max(args.axes)
+                       and all(math.isfinite(message.axes[index]) for index in args.axes)
+                       and all(abs(value) < 1e-9 for value in command))
+            gate.update_joy(message.buttons, neutral=neutral)
             if publisher is not None:
-                command = mapper.command(message.axes)
                 twist = Twist()
                 twist.linear.x, twist.linear.y, twist.angular.z = command
                 publisher.publish(twist)
@@ -73,7 +79,8 @@ def main(argv=None) -> int:
                 children.append(subprocess.Popen(command, start_new_session=(os.name != "nt")))
         node.get_logger().info(
             f"{args.topic} -> 127.0.0.1:{args.port}; hold Joy buttons[{args.deadman_button}] for velocity; "
-            f"buttons[{args.stop_button}] requests policy shutdown; timeout={args.timeout}s"
+            f"START[{args.start_button}] hold {args.start_hold}s with sticks centered and L1 released; "
+            f"B[{args.pause_button}] locks velocity; timeout={args.timeout}s"
         )
         if not args.bridge_only:
             node.get_logger().info(f"Proportional Joy axes vx/vy/wz={args.axes}; centers={args.centers}; full-stick scales={args.scales}; deadzone={args.deadzone}")
@@ -82,6 +89,7 @@ def main(argv=None) -> int:
         pass
     finally:
         gate.held = False
+        gate.locked = True
         transport.sendto(gate.packet(), ("127.0.0.1", args.port))
         transport.close()
         for child in children:

@@ -197,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--command_yaw", type=float, default=0.0)
     command_modes = parser.add_mutually_exclusive_group()
     command_modes.add_argument("--keyboard", action="store_true")
-    command_modes.add_argument("--ros2", action="store_true", help="Local ROS bridge velocity; Enter/Space arms, q exits")
+    command_modes.add_argument("--ros2", action="store_true", help="Gamepad START before IMU/motors; L1 enables velocity, B locks it, q exits")
     parser.add_argument("--ros2_port", type=int, default=19761)
     parser.add_argument("--ros2_timeout_s", type=float, default=0.25)
     parser.add_argument("--auto_arm", action="store_true")
@@ -285,7 +285,7 @@ def _validate_args(args: argparse.Namespace) -> None:
     if not 1 <= args.ros2_port <= 65535:
         raise ValueError("--ros2_port must be between 1 and 65535")
     if args.ros2 and (args.auto_arm or args.diag_sequence):
-        raise ValueError("--ros2 requires manual keyboard arming and cannot use --diag_sequence")
+        raise ValueError("--ros2 requires gamepad START and cannot use --auto_arm or --diag_sequence")
     if args.ros2 and (args.command_x not in (None, 0.0) or args.command_y != 0.0 or args.command_yaw != 0.0):
         raise ValueError("--ros2 accepts velocity only from the bridge")
 
@@ -382,6 +382,7 @@ class DeploymentRunner:
         initial_x = 0.0 if (args.keyboard or args.ros2) and args.command_x is None else (0.10 if args.command_x is None else args.command_x)
         self.command = [float(initial_x), float(args.command_y), float(args.command_yaw)]
         self.ros_command: RosCommandReceiver | None = None
+        self.ros_start_requested = False
         self.keyboard = None
         if args.keyboard or args.ros2:
             keyboard_class = RosArmKeyboard if args.ros2 else KeyboardCommandVelocity
@@ -499,8 +500,20 @@ class DeploymentRunner:
         if self.ros_command is not None:
             state = self.ros_command.poll()
             self.command[:] = state.command
+            self.ros_start_requested = state.start_requested
+            if state.start_requested and self.keyboard is not None:
+                self.keyboard.armed = True
             if state.stop_requested:
                 self.stop_event.set()
+
+    def _wait_for_ros_start(self) -> bool:
+        print("[ROS2] waiting: center sticks, release L1, hold START 1s; q exits; motors not enabled")
+        while not self.stop_event.is_set():
+            self._poll_command()
+            if self.ros_start_requested and not self.stop_event.is_set():
+                return True
+            time.sleep(0.01)
+        return False
 
     def _diag_command(self, policy_elapsed_s: float) -> str:
         if not self.args.diag_sequence:
@@ -657,6 +670,12 @@ class DeploymentRunner:
         self.logger.submit(rows)
 
     def _hardware_run(self) -> None:
+        if self.args.ros2:
+            self._poll_command()
+            if self.stop_event.is_set():
+                return
+            if not self.ros_start_requested and not self._wait_for_ros_start():
+                return
         os.environ[DM_SDK_PROFILE_ENV] = self.args.dm_sdk_profile
         if self.args.dm_sdk_profile == "low_latency":
             self.windows_timer_period.begin()
@@ -869,7 +888,9 @@ class DeploymentRunner:
                 minimum=(self.args.keyboard_min_x, self.args.keyboard_min_y, self.args.keyboard_min_yaw),
                 maximum=(self.args.keyboard_max_x, self.args.keyboard_max_y, self.args.keyboard_max_yaw),
             )
-            print(f"[ROS2] listening on 127.0.0.1:{self.args.ros2_port}; Enter/Space arms, q exits; stale/disabled velocity=zero")
+            print(f"[ROS2] listening on 127.0.0.1:{self.args.ros2_port}; START arms, L1 enables velocity, B locks it, q exits")
+            if not self._wait_for_ros_start():
+                return
         self.imu = ImuObservationSource(self.args, self.pipeline.policy_dt)
         print("[IMU] diagnostics=" + str(self.imu.diagnostics()))
         if self.args.dry_run:
